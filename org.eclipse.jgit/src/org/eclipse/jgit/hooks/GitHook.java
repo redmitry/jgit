@@ -180,7 +180,7 @@ abstract class GitHook<T> implements Callable<T> {
 	 * @since 4.11
 	 */
 	public boolean isNativeHookPresent() {
-		return FS.DETECTED.findHook(getRepository(), getHookName()) != null;
+		return FS.DETECTED.findHookPath(getRepository(), getHookName()) != null;
 	}
 
 }

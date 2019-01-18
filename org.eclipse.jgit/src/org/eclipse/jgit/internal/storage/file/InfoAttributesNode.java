@@ -43,8 +43,8 @@
  */
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.attributes.AttributesNode;
 import org.eclipse.jgit.lib.Constants;
@@ -78,7 +78,7 @@ public class InfoAttributesNode extends AttributesNode {
 
 		FS fs = repository.getFS();
 
-		File attributes = fs.resolve(repository.getDirectory(),
+		Path attributes = fs.resolve(repository.getDirectoryPath(),
 				Constants.INFO_ATTRIBUTES);
 		FileRepository.AttributesNodeProviderImpl.loadRulesFromFile(r, attributes);
 

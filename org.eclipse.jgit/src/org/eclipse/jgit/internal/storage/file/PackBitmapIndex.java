@@ -43,7 +43,6 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.MessageFormat;
@@ -52,9 +51,13 @@ import org.eclipse.jgit.errors.CorruptObjectException;
 import org.eclipse.jgit.internal.JGitText;
 import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.util.io.SilentFileInputStream;
 
 import com.googlecode.javaewah.EWAHCompressedBitmap;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 /**
  * Logical representation of the bitmap data stored in the pack index.
@@ -70,6 +73,27 @@ import com.googlecode.javaewah.EWAHCompressedBitmap;
 public abstract class PackBitmapIndex {
 	/** Flag bit denoting the bitmap should be reused during index creation. */
 	public static final int FLAG_REUSE = 1;
+
+	/**
+	 * @deprecated use {@link #open(Path, PackIndex, PackReverseIndex)}
+	 *
+	 * @param idxFile
+	 *            existing pack .bitmap to read.
+	 * @param packIndex
+	 *            the pack index for the corresponding pack file.
+	 * @param reverseIndex
+	 *            the pack reverse index for the corresponding pack file.
+	 * @return a copy of the index in-memory.
+	 * @throws java.io.IOException
+	 *             the stream cannot be read.
+	 * @throws CorruptObjectException
+	 *             the stream does not contain a valid pack bitmap index.
+	 */
+	public static PackBitmapIndex open(
+			File idxFile, PackIndex packIndex, PackReverseIndex reverseIndex)
+			throws IOException {
+                return open(idxFile.toPath(), packIndex, reverseIndex);
+	}
 
 	/**
 	 * Read an existing pack bitmap index file from a buffered stream.
@@ -91,17 +115,16 @@ public abstract class PackBitmapIndex {
 	 *             the stream does not contain a valid pack bitmap index.
 	 */
 	public static PackBitmapIndex open(
-			File idxFile, PackIndex packIndex, PackReverseIndex reverseIndex)
+			Path idxFile, PackIndex packIndex, PackReverseIndex reverseIndex)
 			throws IOException {
-		try (SilentFileInputStream fd = new SilentFileInputStream(
-				idxFile)) {
+		try (InputStream fd = new BufferedInputStream(
+                        Files.newInputStream(idxFile, StandardOpenOption.READ))) {
 			try {
 				return read(fd, packIndex, reverseIndex);
 			} catch (IOException ioe) {
 				throw new IOException(
 						MessageFormat.format(JGitText.get().unreadablePackIndex,
-								idxFile.getAbsolutePath()),
-						ioe);
+								idxFile.toAbsolutePath()), ioe);
 			}
 		}
 	}

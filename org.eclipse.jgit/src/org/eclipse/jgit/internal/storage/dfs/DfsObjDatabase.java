@@ -45,8 +45,8 @@ package org.eclipse.jgit.internal.storage.dfs;
 
 import static java.util.stream.Collectors.joining;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -520,14 +520,14 @@ public abstract class DfsObjDatabase extends ObjectDatabase {
 	 * @param ext
 	 *            file extension that will be read i.e "pack" or "idx".
 	 * @return channel to read the file.
-	 * @throws java.io.FileNotFoundException
+	 * @throws java.nio.file.NoSuchFileException
 	 *             the file does not exist.
 	 * @throws java.io.IOException
 	 *             the file cannot be opened.
 	 */
 	protected abstract ReadableChannel openFile(
 			DfsPackDescription desc, PackExt ext)
-			throws FileNotFoundException, IOException;
+			throws NoSuchFileException, IOException;
 
 	/**
 	 * Open a pack, pack index, or other related file for writing.

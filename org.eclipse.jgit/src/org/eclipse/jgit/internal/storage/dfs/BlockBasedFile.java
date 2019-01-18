@@ -197,10 +197,9 @@ abstract class BlockBasedFile {
 	}
 
 	static int read(ReadableChannel rc, ByteBuffer buf) throws IOException {
-		int n;
-		do {
-			n = rc.read(buf);
-		} while (0 < n && buf.hasRemaining());
+                while(buf.hasRemaining() && rc.read(buf) >= 0) {
+                    // do nothing
+                }
 		return buf.position();
 	}
 

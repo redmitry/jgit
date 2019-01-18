@@ -45,6 +45,7 @@ package org.eclipse.jgit.errors;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.internal.JGitText;
@@ -56,13 +57,23 @@ public class PackInvalidException extends IOException {
 	private static final long serialVersionUID = 1L;
 
 	/**
-	 * Construct a pack invalid error.
+	 * @deprecated use {@link #PackInvalidException(Path)}
 	 *
 	 * @param path
 	 *            path of the invalid pack file.
 	 */
 	public PackInvalidException(File path) {
 		this(path.getAbsolutePath());
+	}
+
+	/**
+	 * Construct a pack invalid error.
+	 *
+	 * @param path
+	 *            path of the invalid pack file.
+	 */
+	public PackInvalidException(Path path) {
+		this(path.toAbsolutePath().toString());
 	}
 
 	/**

@@ -44,12 +44,14 @@
 package org.eclipse.jgit.transport;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -154,9 +156,9 @@ public class TransportAmazonS3 extends HttpTransport implements WalkTransport {
 		super(local, uri);
 
 		Properties props = loadProperties();
-		File directory = local.getDirectory();
+		Path directory = local.getDirectoryPath();
 		if (!props.containsKey("tmpdir") && directory != null) //$NON-NLS-1$
-			props.put("tmpdir", directory.getPath()); //$NON-NLS-1$
+			props.put("tmpdir", directory); //$NON-NLS-1$
 
 		s3 = new AmazonS3(props);
 		bucket = uri.getHost();
@@ -170,14 +172,16 @@ public class TransportAmazonS3 extends HttpTransport implements WalkTransport {
 	}
 
 	private Properties loadProperties() throws NotSupportedException {
-		if (local.getDirectory() != null) {
-			File propsFile = new File(local.getDirectory(), uri.getUser());
-			if (propsFile.isFile())
+		if (local.getDirectoryPath() != null) {
+                        Path propsFile = local.getDirectoryPath().resolve(uri.getUser());
+			if (Files.isRegularFile(propsFile))
 				return loadPropertiesFile(propsFile);
 		}
 
-		File propsFile = new File(local.getFS().userHome(), uri.getUser());
-		if (propsFile.isFile())
+                final Path userHome = local.getFS().userHomePath();
+                final Path propsFile = userHome != null ? userHome.resolve(uri.getUser())
+                                                        : Paths.get(uri.getUser());
+		if (Files.isRegularFile(propsFile))
 			return loadPropertiesFile(propsFile);
 
 		Properties props = new Properties();
@@ -192,7 +196,7 @@ public class TransportAmazonS3 extends HttpTransport implements WalkTransport {
 		return props;
 	}
 
-	private static Properties loadPropertiesFile(File propsFile)
+	private static Properties loadPropertiesFile(Path propsFile)
 			throws NotSupportedException {
 		try {
 			return AmazonS3.properties(propsFile);

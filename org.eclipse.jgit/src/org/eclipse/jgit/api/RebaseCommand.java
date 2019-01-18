@@ -46,14 +46,21 @@ package org.eclipse.jgit.api;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -106,7 +113,6 @@ import org.eclipse.jgit.submodule.SubmoduleWalk.IgnoreSubmoduleMode;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
 import org.eclipse.jgit.util.FileUtils;
-import org.eclipse.jgit.util.IO;
 import org.eclipse.jgit.util.RawParseUtils;
 
 /**
@@ -250,7 +256,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 	protected RebaseCommand(Repository repo) {
 		super(repo);
 		walk = new RevWalk(repo);
-		rebaseState = new RebaseState(repo.getDirectory());
+		rebaseState = new RebaseState(repo.getDirectoryPath());
 	}
 
 	/**
@@ -289,7 +295,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 				}
 				this.upstreamCommit = walk.parseCommit(repo
 						.resolve(upstreamCommitId));
-				preserveMerges = rebaseState.getRewrittenDir().exists();
+				preserveMerges = Files.exists(rebaseState.getRewrittenDir());
 				break;
 			case BEGIN:
 				autoStash();
@@ -306,13 +312,20 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 					}
 				}
 				RebaseResult res = initFilesAndRewind();
-				if (stopAfterInitialization)
+				if (stopAfterInitialization) {
 					return RebaseResult.INTERACTIVE_PREPARED_RESULT;
+                                }
 				if (res != null) {
 					autoStashApply();
-					if (rebaseState.getDir().exists())
-						FileUtils.delete(rebaseState.getDir(),
-								FileUtils.RECURSIVE);
+                                        Path dir = rebaseState.getDir();
+                                        if (Files.exists(dir)) {
+                                            Files.walk(dir, FileVisitOption.FOLLOW_LINKS)
+                                                .sorted(Comparator.reverseOrder())
+                                                .forEach(path -> {
+                                                    try { Files.delete(path); }
+                                                    catch (IOException ex) {}
+                                                });
+                                        }
 					return res;
 				}
 			}
@@ -335,10 +348,10 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 					if (result != null)
 						return result;
 				}
-				File amendFile = rebaseState.getFile(AMEND);
-				boolean amendExists = amendFile.exists();
+				Path amendFile = rebaseState.getFile(AMEND);
+				boolean amendExists = Files.exists(amendFile);
 				if (amendExists) {
-					FileUtils.delete(amendFile);
+                                        Files.deleteIfExists(amendFile);
 				}
 				if (newHead == null && !amendExists) {
 					// continueRebase() returns null only if no commit was
@@ -392,7 +405,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 							message)
 					.call();
 			if (stashCommit != null) {
-				FileUtils.mkdir(rebaseState.getDir());
+                                Files.createDirectory(rebaseState.getDir());
 				rebaseState.createFile(AUTOSTASH, stashCommit.getName());
 			}
 		}
@@ -400,7 +413,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 
 	private boolean autoStashApply() throws IOException, GitAPIException {
 		boolean conflicts = false;
-		if (rebaseState.getFile(AUTOSTASH).exists()) {
+		if (Files.exists(rebaseState.getFile(AUTOSTASH))) {
 			String stash = rebaseState.readFile(AUTOSTASH);
 			try (Git git = Git.wrap(repo)) {
 				git.stashApply().setStashRef(stash)
@@ -484,10 +497,10 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			List<RebaseTodoLine> steps = repo.readRebaseTodo(
 					rebaseState.getPath(GIT_REBASE_TODO), false);
 			RebaseTodoLine nextStep = steps.size() > 0 ? steps.get(0) : null;
-			File messageFixupFile = rebaseState.getFile(MESSAGE_FIXUP);
-			File messageSquashFile = rebaseState.getFile(MESSAGE_SQUASH);
-			if (isSquash && messageFixupFile.exists())
-				messageFixupFile.delete();
+			Path messageFixupFile = rebaseState.getFile(MESSAGE_FIXUP);
+			Path messageSquashFile = rebaseState.getFile(MESSAGE_SQUASH);
+			if (isSquash && Files.exists(messageFixupFile))
+                                Files.deleteIfExists(messageFixupFile);
 			newHead = doSquashFixup(isSquash, commitToPick, nextStep,
 					messageFixupFile, messageSquashFile);
 		}
@@ -655,7 +668,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		List<RevCommit> newParents = new ArrayList<>();
 		for (int p = 0; p < commitToPick.getParentCount(); p++) {
 			String parentHash = commitToPick.getParent(p).getName();
-			if (!new File(rebaseState.getRewrittenDir(), parentHash).exists())
+                        if (!Files.exists(rebaseState.getRewrittenDir().resolve(parentHash)))
 				newParents.add(commitToPick.getParent(p));
 			else {
 				String newParent = RebaseState.readFile(
@@ -678,8 +691,8 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 
 	private void writeRewrittenHashes() throws RevisionSyntaxException,
 			IOException, RefNotFoundException {
-		File currentCommitFile = rebaseState.getFile(CURRENT_COMMIT);
-		if (!currentCommitFile.exists())
+		Path currentCommitFile = rebaseState.getFile(CURRENT_COMMIT);
+		if (!Files.exists(currentCommitFile))
 			return;
 
 		ObjectId headId = getHead().getObjectId();
@@ -687,10 +700,10 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		assert headId != null;
 		String head = headId.getName();
 		String currentCommits = rebaseState.readFile(CURRENT_COMMIT);
-		for (String current : currentCommits.split("\n")) //$NON-NLS-1$
-			RebaseState
-					.createFile(rebaseState.getRewrittenDir(), current, head);
-		FileUtils.delete(currentCommitFile);
+		for (String current : currentCommits.split("\n")) { //$NON-NLS-1$
+			RebaseState.createFile(rebaseState.getRewrittenDir(), current, head);
+                }
+                Files.delete(currentCommitFile);
 	}
 
 	private RebaseResult finishRebase(RevCommit finalHead,
@@ -699,7 +712,13 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		updateHead(headName, finalHead, upstreamCommit);
 		boolean stashConflicts = autoStashApply();
 		getRepository().autoGC(monitor);
-		FileUtils.delete(rebaseState.getDir(), FileUtils.RECURSIVE);
+                
+                Files.walk(rebaseState.getDir(), FileVisitOption.FOLLOW_LINKS)
+                                        .sorted(Comparator.reverseOrder())
+                                        .forEach(path -> {
+                                                try { Files.delete(path); }
+                                                catch (IOException ex) {}
+                                        });
 		if (stashConflicts)
 			return RebaseResult.STASH_APPLY_CONFLICTS_RESULT;
 		if (lastStepIsForward || finalHead == null)
@@ -713,7 +732,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			return;
 		if (RebaseTodoLine.Action.SQUASH.equals(steps.get(0).getAction())
 				|| RebaseTodoLine.Action.FIXUP.equals(steps.get(0).getAction())) {
-			if (!rebaseState.getFile(DONE).exists()
+			if (!Files.exists(rebaseState.getFile(DONE))
 					|| rebaseState.readFile(DONE).trim().length() == 0) {
 				throw new InvalidRebaseStepException(MessageFormat.format(
 						JGitText.get().cannotSquashFixupWithoutPreviousCommit,
@@ -724,10 +743,10 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 	}
 
 	private RevCommit doSquashFixup(boolean isSquash, RevCommit commitToPick,
-			RebaseTodoLine nextStep, File messageFixup, File messageSquash)
+			RebaseTodoLine nextStep, Path messageFixup, Path messageSquash)
 			throws IOException, GitAPIException {
 
-		if (!messageSquash.exists()) {
+		if (!Files.exists(messageSquash)) {
 			// init squash/fixup sequence
 			ObjectId headId = repo.resolve(Constants.HEAD);
 			RevCommit previousCommit = walk.parseCommit(headId);
@@ -746,12 +765,11 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		String content = composeSquashMessage(isSquash,
 				commitToPick, currSquashMessage, count);
 		rebaseState.createFile(MESSAGE_SQUASH, content);
-		if (messageFixup.exists())
+		if (Files.exists(messageFixup))
 			rebaseState.createFile(MESSAGE_FIXUP, content);
 
-		return squashIntoPrevious(
-				!messageFixup.exists(),
-				nextStep);
+		return squashIntoPrevious(!Files.exists(messageFixup),
+                                            nextStep);
 	}
 
 	private void resetSoftToParent() throws IOException,
@@ -790,8 +808,8 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 				retNewHead = git.commit()
 						.setMessage(stripCommentLines(commitMessage))
 						.setAmend(true).setNoVerify(true).call();
-				rebaseState.getFile(MESSAGE_SQUASH).delete();
-				rebaseState.getFile(MESSAGE_FIXUP).delete();
+				Files.deleteIfExists(rebaseState.getFile(MESSAGE_SQUASH));
+				Files.deleteIfExists(rebaseState.getFile(MESSAGE_FIXUP));
 
 			} else {
 				// Next step is either Squash or Fixup
@@ -937,7 +955,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			if (needsDeleteFiles) {
 				List<String> fileList = dco.getToBeDeleted();
 				for (String filePath : fileList) {
-					File fileToDelete = new File(repo.getWorkTree(), filePath);
+					final Path fileToDelete = repo.getWorkTreePath().resolve(filePath);
 					if (repo.getFS().exists(fileToDelete))
 						FileUtils.delete(fileToDelete, FileUtils.RECURSIVE
 								| FileUtils.RETRY);
@@ -993,12 +1011,12 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 	}
 
 	private PersonIdent parseAuthor() throws IOException {
-		File authorScriptFile = rebaseState.getFile(AUTHOR_SCRIPT);
+		Path authorScriptFile = rebaseState.getFile(AUTHOR_SCRIPT);
 		byte[] raw;
 		try {
-			raw = IO.readFully(authorScriptFile);
+			raw = Files.readAllBytes(authorScriptFile);
 		} catch (FileNotFoundException notFound) {
-			if (authorScriptFile.exists()) {
+			if (Files.exists(authorScriptFile)) {
 				throw notFound;
 			}
 			return null;
@@ -1116,7 +1134,12 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 				ProgressMonitor.UNKNOWN);
 
 		// create the folder for the meta information
-		FileUtils.mkdir(rebaseState.getDir(), true);
+                Path dir = rebaseState.getDir();
+                if (!Files.exists(dir)) {
+                    try {
+                        Files.createDirectory(dir);
+                    } catch (FileAlreadyExistsException ex) {}
+                }
 
 		repo.writeOrigHead(headId);
 		rebaseState.createFile(REBASE_HEAD, headId.name());
@@ -1149,8 +1172,14 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		try {
 			checkoutOk = checkoutCommit(headName, upstreamCommit);
 		} finally {
-			if (!checkoutOk)
-				FileUtils.delete(rebaseState.getDir(), FileUtils.RECURSIVE);
+			if (!checkoutOk) {
+                                Files.walk(dir, FileVisitOption.FOLLOW_LINKS)
+                                    .sorted(Comparator.reverseOrder())
+                                    .forEach(path -> {
+                                        try { Files.delete(path); }
+                                        catch (IOException ex) {}
+                                    });
+                        }
 		}
 		monitor.endTask();
 
@@ -1174,8 +1203,9 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		if (preserveMerges) {
 			// When preserving merges we only rewrite commits which have at
 			// least one parent that is itself rewritten (or a merge base)
-			File rewrittenDir = rebaseState.getRewrittenDir();
-			FileUtils.mkdir(rewrittenDir, false);
+			Path rewrittenDir = rebaseState.getRewrittenDir();
+                        Files.createDirectory(rewrittenDir);
+
 			walk.reset();
 			walk.setRevFilter(RevFilter.MERGE_BASE);
 			walk.markStart(upstreamCommit);
@@ -1189,10 +1219,10 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			pickLoop: while(iterator.hasNext()){
 				RevCommit commit = iterator.next();
 				for (int i = 0; i < commit.getParentCount(); i++) {
-					boolean parentRewritten = new File(rewrittenDir, commit
-							.getParent(i).getName()).exists();
+					boolean parentRewritten = Files.exists(rewrittenDir.resolve(
+                                                                    commit.getParent(i).getName()));
 					if (parentRewritten) {
-						new File(rewrittenDir, commit.getName()).createNewFile();
+                                                Files.createFile(rewrittenDir.resolve(commit.getName()));
 						continue pickLoop;
 					}
 				}
@@ -1297,7 +1327,7 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 
 	private void checkParameters() throws WrongRepositoryStateException {
 		if (this.operation == Operation.PROCESS_STEPS) {
-			if (rebaseState.getFile(DONE).exists())
+			if (Files.exists(rebaseState.getFile(DONE)))
 				throw new WrongRepositoryStateException(MessageFormat.format(
 						JGitText.get().wrongRepositoryState, repo
 								.getRepositoryState().name()));
@@ -1388,7 +1418,16 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			}
 			boolean stashConflicts = autoStashApply();
 			// cleanup the files
-			FileUtils.delete(rebaseState.getDir(), FileUtils.RECURSIVE);
+                        Path dir = rebaseState.getDir();
+                        if (Files.exists(dir)) {
+                            Files.walk(dir, FileVisitOption.FOLLOW_LINKS)
+                                .sorted(Comparator.reverseOrder())
+                                .forEach(path -> {
+                                    try { Files.delete(path); }
+                                    catch (IOException ex) {}
+                                });
+                        }
+
 			repo.writeCherryPickHead(null);
 			repo.writeMergeHeads(null);
 			if (stashConflicts)
@@ -1677,21 +1716,22 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 
 	private static class RebaseState {
 
-		private final File repoDirectory;
-		private File dir;
+		private final Path repoDirectory;
+		private Path dir;
 
-		public RebaseState(File repoDirectory) {
+		public RebaseState(Path repoDirectory) {
 			this.repoDirectory = repoDirectory;
 		}
 
-		public File getDir() {
+		public Path getDir() {
 			if (dir == null) {
-				File rebaseApply = new File(repoDirectory, REBASE_APPLY);
-				if (rebaseApply.exists()) {
+				final Path rebaseApply = repoDirectory != null ? repoDirectory.resolve(REBASE_APPLY) 
+                                        : Paths.get(REBASE_APPLY);
+				if (Files.exists(rebaseApply)) {
 					dir = rebaseApply;
 				} else {
-					File rebaseMerge = new File(repoDirectory, REBASE_MERGE);
-					dir = rebaseMerge;
+					dir = repoDirectory != null ? repoDirectory.resolve(REBASE_MERGE)
+                                                : Paths.get(REBASE_MERGE);
 				}
 			}
 			return dir;
@@ -1701,8 +1741,9 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 		 * @return Directory with rewritten commit hashes, usually exists if
 		 *         {@link RebaseCommand#preserveMerges} is true
 		 **/
-		public File getRewrittenDir() {
-			return new File(getDir(), REWRITTEN);
+		public Path getRewrittenDir() {
+                        final Path path = getDir();
+			return path != null ? path.resolve(REWRITTEN) : Paths.get(REWRITTEN);
 		}
 
 		public String readFile(String name) throws IOException {
@@ -1713,37 +1754,46 @@ public class RebaseCommand extends GitCommand<RebaseResult> {
 			createFile(getDir(), name, content);
 		}
 
-		public File getFile(String name) {
-			return new File(getDir(), name);
+		public Path getFile(String name) {
+                        final Path path = getDir();
+			return path != null ? path.resolve(name) : Paths.get(name);
 		}
 
 		public String getPath(String name) {
-			return (getDir().getName() + "/" + name); //$NON-NLS-1$
+			return (getDir().getFileName() + "/" + name); //$NON-NLS-1$
 		}
 
-		private static String readFile(File directory, String fileName)
+		private static String readFile(Path directory, String fileName)
 				throws IOException {
-			byte[] content = IO.readFully(new File(directory, fileName));
+                        Path file = directory != null ? directory.resolve(fileName) : Paths.get(fileName);
+			byte[] content = Files.readAllBytes(file);
 			// strip off the last LF
 			int end = RawParseUtils.prevLF(content, content.length);
 			return RawParseUtils.decode(content, 0, end + 1);
 		}
 
-		private static void createFile(File parentDir, String name,
+		private static void createFile(Path parentDir, String name,
 				String content)
 				throws IOException {
-			File file = new File(parentDir, name);
-			try (FileOutputStream fos = new FileOutputStream(file)) {
-				fos.write(content.getBytes(UTF_8));
-				fos.write('\n');
+			Path file = parentDir != null ? parentDir.resolve(name) : Paths.get(name);
+			try (Writer writer = Files.newBufferedWriter(
+                                                file, StandardCharsets.UTF_8,
+                                                StandardOpenOption.CREATE, 
+                                                StandardOpenOption.WRITE)) {
+                                writer.write(content);
+                                writer.write('\n');
 			}
 		}
 
-		private static void appendToFile(File file, String content)
+		private static void appendToFile(Path file, String content)
 				throws IOException {
-			try (FileOutputStream fos = new FileOutputStream(file, true)) {
-				fos.write(content.getBytes(UTF_8));
-				fos.write('\n');
+			try (Writer writer = Files.newBufferedWriter(
+                                                file, StandardCharsets.UTF_8,
+                                                StandardOpenOption.CREATE, 
+                                                StandardOpenOption.WRITE,
+                                                StandardOpenOption.APPEND)) {
+                                writer.write(content);
+                                writer.write('\n');
 			}
 		}
 	}

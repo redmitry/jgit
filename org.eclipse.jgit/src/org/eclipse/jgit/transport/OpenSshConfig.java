@@ -45,7 +45,6 @@ package org.eclipse.jgit.transport;
 
 import static org.eclipse.jgit.internal.transport.ssh.OpenSshConfigFile.positive;
 
-import java.io.File;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -55,6 +54,9 @@ import org.eclipse.jgit.internal.transport.ssh.OpenSshConfigFile.HostEntry;
 import org.eclipse.jgit.util.FS;
 
 import com.jcraft.jsch.ConfigRepository;
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Fairly complete configuration parser for the OpenSSH ~/.ssh/config file.
@@ -97,19 +99,18 @@ public class OpenSshConfig implements ConfigRepository {
 	 * @return a caching reader of the user's configuration file.
 	 */
 	public static OpenSshConfig get(FS fs) {
-		File home = fs.userHome();
+		Path home = fs.userHomePath();
 		if (home == null)
-			home = new File(".").getAbsoluteFile(); //$NON-NLS-1$
+			home = Paths.get(".").toAbsolutePath(); //$NON-NLS-1$
 
-		final File config = new File(new File(home, SshConstants.SSH_DIR),
-				SshConstants.CONFIG);
+		final Path config = home.resolve(SshConstants.SSH_DIR).resolve(SshConstants.CONFIG);
 		return new OpenSshConfig(home, config);
 	}
 
 	/** The base file. */
 	private OpenSshConfigFile configFile;
 
-	OpenSshConfig(File h, File cfg) {
+	OpenSshConfig(Path h, Path cfg) {
 		configFile = new OpenSshConfigFile(h, cfg,
 				SshSessionFactory.getLocalUserName());
 	}
@@ -144,7 +145,7 @@ public class OpenSshConfig implements ConfigRepository {
 
 		int port;
 
-		File identityFile;
+		Path identityFile;
 
 		String user;
 
@@ -221,10 +222,20 @@ public class OpenSshConfig implements ConfigRepository {
 		}
 
 		/**
+                 * @deprecated use {@link #getIdentityFilePath()}
+                 * 
 		 * @return path of the private key file to use for authentication; null
 		 *         if the caller should use default authentication strategies.
 		 */
 		public File getIdentityFile() {
+			return identityFile.toFile();
+		}
+
+		/**
+		 * @return path of the private key file to use for authentication; null
+		 *         if the caller should use default authentication strategies.
+		 */
+		public Path getIdentityFilePath() {
 			return identityFile;
 		}
 
@@ -292,7 +303,7 @@ public class OpenSshConfig implements ConfigRepository {
 			List<String> identityFiles = entry
 					.getValues(SshConstants.IDENTITY_FILE);
 			if (identityFiles != null && !identityFiles.isEmpty()) {
-				identityFile = new File(identityFiles.get(0));
+				identityFile = Paths.get(identityFiles.get(0));
 			}
 		}
 

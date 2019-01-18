@@ -43,11 +43,10 @@
 
 package org.eclipse.jgit.transport;
 
+import java.io.BufferedInputStream;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,6 +56,10 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.DigestOutputStream;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
@@ -183,7 +186,7 @@ public class AmazonS3 {
 	private final WalkEncryption encryption;
 
 	/** Directory for locally buffered content. */
-	private final File tmpDir;
+	private final Path tmpDir;
 
 	/** S3 Bucket Domain. */
 	private final String domain;
@@ -267,7 +270,7 @@ public class AmazonS3 {
 		proxySelector = ProxySelector.getDefault();
 
 		String tmp = props.getProperty(Keys.TMP_DIR);
-		tmpDir = tmp != null && tmp.length() > 0 ? new File(tmp) : null;
+		tmpDir = tmp != null && tmp.length() > 0 ? Paths.get(tmp) : null;
 	}
 
 	/**
@@ -644,10 +647,11 @@ public class AmazonS3 {
 		c.setRequestProperty("Authorization", "AWS " + publicKey + ":" + sec); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 
-	static Properties properties(File authFile)
-			throws FileNotFoundException, IOException {
+	static Properties properties(Path authFile)
+			throws NoSuchFileException, IOException {
 		final Properties p = new Properties();
-		try (FileInputStream in = new FileInputStream(authFile)) {
+		try (InputStream in = new BufferedInputStream(
+                        Files.newInputStream(authFile))) {
 			p.load(in);
 		}
 		return p;

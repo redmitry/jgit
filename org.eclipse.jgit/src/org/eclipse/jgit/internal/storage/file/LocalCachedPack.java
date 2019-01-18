@@ -43,9 +43,9 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.eclipse.jgit.internal.storage.pack.CachedPack;
@@ -96,12 +96,12 @@ class LocalCachedPack extends CachedPack {
 					return true;
 			}
 			return false;
-		} catch (FileNotFoundException packGone) {
+		} catch (NoSuchFileException packGone) {
 			return false;
 		}
 	}
 
-	private PackFile[] getPacks() throws FileNotFoundException {
+	private PackFile[] getPacks() throws NoSuchFileException {
 		if (packs == null) {
 			PackFile[] p = new PackFile[packNames.length];
 			for (int i = 0; i < packNames.length; i++)
@@ -111,16 +111,16 @@ class LocalCachedPack extends CachedPack {
 		return packs;
 	}
 
-	private PackFile getPackFile(String packName) throws FileNotFoundException {
+	private PackFile getPackFile(String packName) throws NoSuchFileException {
 		for (PackFile pack : odb.getPacks()) {
 			if (packName.equals(pack.getPackName()))
 				return pack;
 		}
-		throw new FileNotFoundException(getPackFilePath(packName));
+		throw new NoSuchFileException(getPackFilePath(packName));
 	}
 
 	private String getPackFilePath(String packName) {
-		final File packDir = odb.getPackDirectory();
-		return new File(packDir, "pack-" + packName + ".pack").getPath(); //$NON-NLS-1$ //$NON-NLS-2$
+		final Path packDir = odb.getPackDirectoryPath();
+                return packDir.resolve("pack-" + packName + ".pack").toString(); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 }

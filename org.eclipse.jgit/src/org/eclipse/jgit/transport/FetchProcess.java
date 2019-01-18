@@ -50,10 +50,10 @@ import static org.eclipse.jgit.transport.ReceiveCommand.Result.OK;
 import static org.eclipse.jgit.transport.ReceiveCommand.Result.REJECTED_NONFASTFORWARD;
 import static org.eclipse.jgit.transport.ReceiveCommand.Type.UPDATE_NONFASTFORWARD;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -331,10 +331,11 @@ class FetchProcess {
 	}
 
 	private void updateFETCH_HEAD(FetchResult result) throws IOException {
-		File meta = transport.local.getDirectory();
-		if (meta == null)
+		Path meta = transport.local.getDirectoryPath();
+		if (meta == null) {
 			return;
-		final LockFile lock = new LockFile(new File(meta, "FETCH_HEAD")); //$NON-NLS-1$
+                }
+		final LockFile lock = new LockFile(meta.resolve("FETCH_HEAD")); //$NON-NLS-1$
 		try {
 			if (lock.lock()) {
 				try (Writer w = new OutputStreamWriter(

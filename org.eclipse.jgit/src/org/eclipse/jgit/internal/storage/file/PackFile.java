@@ -51,14 +51,16 @@ import static org.eclipse.jgit.internal.storage.pack.PackExt.KEEP;
 
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.io.RandomAccessFile;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel.MapMode;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -108,17 +110,17 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 		}
 	};
 
-	private final File packFile;
+	private final Path packFile;
 
 	private final int extensions;
 
-	private File keepFile;
+	private Path keepFile;
 
 	private volatile String packName;
 
 	final int hash;
 
-	private RandomAccessFile fd;
+	private SeekableByteChannel fd;
 
 	/** Serializes reads performed against {@link #fd}. */
 	private final Object readLock = new Object();
@@ -155,7 +157,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	private volatile LongList corruptObjects;
 
 	/**
-	 * Construct a reader for an existing, pre-indexed packfile.
+	 * @deprecated use {@link #PackFile(Path, int)}
 	 *
 	 * @param packFile
 	 *            path of the <code>.pack</code> file holding the data.
@@ -163,8 +165,25 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	 *            additional pack file extensions with the same base as the pack
 	 */
 	public PackFile(File packFile, int extensions) {
+		this(packFile.toPath(), extensions);
+	}
+
+	/**
+	 * Construct a reader for an existing, pre-indexed packfile.
+	 *
+	 * @param packFile
+	 *            path of the <code>.pack</code> file holding the data.
+	 * @param extensions
+	 *            additional pack file extensions with the same base as the pack
+	 */
+	public PackFile(Path packFile, int extensions) {
 		this.packFile = packFile;
-		this.packLastModified = (int) (packFile.lastModified() >> 10);
+                try {
+                        this.packLastModified = (int)(Files.getLastModifiedTime(packFile, LinkOption.NOFOLLOW_LINKS).toMillis() >> 10); // 0x10 ?
+                } catch(IOException ex) {
+                        this.packLastModified = 0;
+                }
+                
 		this.extensions = extensions;
 
 		// Multiply by 31 here so we can more directly combine with another
@@ -187,7 +206,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 				} else if (!Arrays.equals(packChecksum, idx.packChecksum)) {
 					throw new PackMismatchException(MessageFormat.format(
 							JGitText.get().packChecksumMismatch,
-							packFile.getPath()));
+							packFile));
 				}
 				loadedIdx = idx;
 			} catch (InterruptedIOException e) {
@@ -202,11 +221,20 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	}
 
 	/**
-	 * Get the File object which locates this pack on disk.
+	 * @deprecated use {@link #getPackFilePath()}
 	 *
 	 * @return the File object which locates this pack on disk.
 	 */
 	public File getPackFile() {
+		return packFile.toFile();
+	}
+
+	/**
+	 * Get the File object which locates this pack on disk.
+	 *
+	 * @return the File object which locates this pack on disk.
+	 */
+	public Path getPackFilePath() {
 		return packFile;
 	}
 
@@ -228,7 +256,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	public String getPackName() {
 		String name = packName;
 		if (name == null) {
-			name = getPackFile().getName();
+			name = getPackFilePath().getFileName().toString();
 			if (name.startsWith("pack-")) //$NON-NLS-1$
 				name = name.substring("pack-".length()); //$NON-NLS-1$
 			if (name.endsWith(".pack")) //$NON-NLS-1$
@@ -264,7 +292,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	public boolean shouldBeKept() {
 		if (keepFile == null)
 			keepFile = extFile(KEEP);
-		return keepFile.exists();
+		return Files.exists(keepFile);
 	}
 
 	/**
@@ -472,7 +500,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 					setCorrupt(src.offset);
 					throw new CorruptObjectException(MessageFormat.format(
 							JGitText.get().objectAtHasBadZlibStream,
-							Long.valueOf(src.offset), getPackFile()));
+							Long.valueOf(src.offset), getPackFilePath()));
 				}
 			} else if (validate) {
 				// We don't have a CRC32 code in the index, so compute it
@@ -515,7 +543,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			CorruptObjectException corruptObject = new CorruptObjectException(
 					MessageFormat.format(
 							JGitText.get().objectAtHasBadZlibStream,
-							Long.valueOf(src.offset), getPackFile()),
+							src.offset, getPackFilePath()),
 					dataFormat);
 
 			throw new StoredObjectRepresentationNotAvailableException(src,
@@ -573,7 +601,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 				if (crc2.getValue() != expectedCRC) {
 					throw new CorruptObjectException(MessageFormat.format(
 							JGitText.get().objectAtHasBadZlibStream,
-							Long.valueOf(src.offset), getPackFile()));
+							src.offset, getPackFilePath()));
 				}
 			}
 		}
@@ -640,21 +668,22 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			if (invalid)
 				throw new PackInvalidException(packFile);
 			synchronized (readLock) {
-				fd = new RandomAccessFile(packFile, "r"); //$NON-NLS-1$
-				length = fd.length();
+                                
+				fd = Files.newByteChannel(packFile, StandardOpenOption.READ); //$NON-NLS-1$
+				length = fd.size();
 				onOpenPack();
 			}
 		} catch (InterruptedIOException e) {
 			// don't invalidate the pack, we are interrupted from another thread
 			openFail(false);
 			throw e;
-		} catch (FileNotFoundException fn) {
+		} catch (NoSuchFileException fn) {
 			// don't invalidate the pack if opening an existing file failed
 			// since it may be related to a temporary lack of resources (e.g.
 			// max open files)
-			openFail(!packFile.exists());
+			openFail(!Files.exists(packFile));
 			throw fn;
-		} catch (EOFException | AccessDeniedException | NoSuchFileException
+		} catch (EOFException | AccessDeniedException
 				| CorruptObjectException | NoPackSignatureException
 				| PackMismatchException | UnpackException
 				| UnsupportedPackIndexVersionException
@@ -697,8 +726,12 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			if (length < pos + size)
 				size = (int) (length - pos);
 			final byte[] buf = new byte[size];
-			fd.seek(pos);
-			fd.readFully(buf, 0, size);
+                        final ByteBuffer buffer = ByteBuffer.wrap(buf);
+                        fd.position(pos);
+                        while (buffer.hasRemaining() && fd.read(buffer) >= 0) {
+                            // do nothing
+                        }
+                        
 			return new ByteArrayWindow(this, pos, buf);
 		}
 	}
@@ -708,9 +741,14 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			if (length < pos + size)
 				size = (int) (length - pos);
 
-			MappedByteBuffer map;
+                        byte[] buf = new byte[size];
+			ByteBuffer buffer = ByteBuffer.wrap(buf);
 			try {
-				map = fd.getChannel().map(MapMode.READ_ONLY, pos, size);
+				//map = fd.getChannel().map(MapMode.READ_ONLY, pos, size);
+                                fd.position(pos);
+                                while (fd.read(buffer) >= 0) {
+                                        // do nothing
+                                }
 			} catch (IOException ioe1) {
 				// The most likely reason this failed is the JVM has run out
 				// of virtual memory. We need to discard quickly, and try to
@@ -718,26 +756,28 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 				//
 				System.gc();
 				System.runFinalization();
-				map = fd.getChannel().map(MapMode.READ_ONLY, pos, size);
+                                fd.position(pos);
+                                while (fd.read(buffer) >= 0) {}
 			}
 
-			if (map.hasArray())
-				return new ByteArrayWindow(this, pos, map.array());
-			return new ByteBufferWindow(this, pos, map);
+                        return new ByteArrayWindow(this, pos, buf);
 		}
 	}
 
 	private void onOpenPack() throws IOException {
 		final PackIndex idx = idx();
-		final byte[] buf = new byte[20];
+                
+		final byte[] arr = new byte[20];
+                ByteBuffer buf = ByteBuffer.wrap(arr, 0, 12);
+                
+		fd.position(0);
+                while (buf.hasRemaining() && fd.read(buf) >= 0) {}
 
-		fd.seek(0);
-		fd.readFully(buf, 0, 12);
-		if (RawParseUtils.match(buf, 0, Constants.PACK_SIGNATURE) != 4) {
+		if (RawParseUtils.match(arr, 0, Constants.PACK_SIGNATURE) != 4) {
 			throw new NoPackSignatureException(JGitText.get().notAPACKFile);
 		}
-		final long vers = NB.decodeUInt32(buf, 4);
-		final long packCnt = NB.decodeUInt32(buf, 8);
+		final long vers = NB.decodeUInt32(arr, 4);
+		final long packCnt = NB.decodeUInt32(arr, 8);
 		if (vers != 2 && vers != 3) {
 			throw new UnsupportedPackVersionException(vers);
 		}
@@ -745,18 +785,20 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 		if (packCnt != idx.getObjectCount()) {
 			throw new PackMismatchException(MessageFormat.format(
 					JGitText.get().packObjectCountMismatch,
-					Long.valueOf(packCnt), Long.valueOf(idx.getObjectCount()),
-					getPackFile()));
+					packCnt, Long.valueOf(idx.getObjectCount()),
+					getPackFilePath()));
 		}
 
-		fd.seek(length - 20);
-		fd.readFully(buf, 0, 20);
-		if (!Arrays.equals(buf, packChecksum)) {
+                buf.clear();
+                
+		fd.position(length - 20);
+		while (buf.hasRemaining() && fd.read(buf) >= 0) {}
+		if (!Arrays.equals(arr, packChecksum)) {
 			throw new PackMismatchException(MessageFormat.format(
 					JGitText.get().packObjectCountMismatch
-					, ObjectId.fromRaw(buf).name()
+					, ObjectId.fromRaw(arr).name()
 					, ObjectId.fromRaw(idx.packChecksum).name()
-					, getPackFile()));
+					, getPackFilePath()));
 		}
 	}
 
@@ -898,7 +940,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			throw new CorruptObjectException(
 					MessageFormat.format(
 							JGitText.get().objectAtHasBadZlibStream,
-							Long.valueOf(pos), getPackFile()),
+							pos, getPackFilePath()),
 					dfe);
 		}
 	}
@@ -1038,15 +1080,15 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 
 		default:
 			throw new IOException(MessageFormat.format(
-					JGitText.get().unknownObjectType, Integer.valueOf(type)));
+					JGitText.get().unknownObjectType, type));
 		}
 
 		try {
 			return BinaryDelta.getResultSize(getDeltaHeader(curs, deltaAt));
 		} catch (DataFormatException e) {
 			throw new CorruptObjectException(MessageFormat.format(
-					JGitText.get().objectAtHasBadZlibStream, Long.valueOf(pos),
-					getPackFile()));
+					JGitText.get().objectAtHasBadZlibStream, pos,
+					getPackFilePath()));
 		}
 	}
 
@@ -1114,7 +1156,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 			try {
 				idx = PackBitmapIndex.open(extFile(BITMAP_INDEX), idx(),
 						getReverseIdx());
-			} catch (FileNotFoundException e) {
+			} catch (NoSuchFileException e) {
 				// Once upon a time this bitmap file existed. Now it
 				// has been removed. Most likely an external gc  has
 				// removed this packfile and the bitmap
@@ -1162,11 +1204,11 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 		}
 	}
 
-	private File extFile(PackExt ext) {
-		String p = packFile.getName();
+	private Path extFile(PackExt ext) {
+		String p = packFile.getFileName().toString();
 		int dot = p.lastIndexOf('.');
 		String b = (dot < 0) ? p : p.substring(0, dot);
-		return new File(packFile.getParentFile(), b + '.' + ext.getExtension());
+		return packFile.resolveSibling(b + '.' + ext.getExtension());
 	}
 
 	private boolean hasExt(PackExt ext) {

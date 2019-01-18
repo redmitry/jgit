@@ -46,11 +46,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.eclipse.jgit.lib.Constants.DEFAULT_REMOTE_NAME;
 import static org.eclipse.jgit.lib.Constants.R_REMOTES;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -269,7 +270,7 @@ public class RepoCommand extends GitCommand<RevCommit> {
 		@Override
 		public RemoteFile readFileWithMode(String uri, String ref, String path)
 				throws GitAPIException, IOException {
-			File dir = FileUtils.createTempDir("jgit_", ".git", null); //$NON-NLS-1$ //$NON-NLS-2$
+			Path dir = FileUtils.createTempDir("jgit_", ".git", (Path)null); //$NON-NLS-1$ //$NON-NLS-2$
 			try (Git git = Git.cloneRepository().setBare(true).setDirectory(dir)
 					.setURI(uri).call()) {
 				Repository repo = git.getRepository();
@@ -571,7 +572,7 @@ public class RepoCommand extends GitCommand<RevCommit> {
 				throw new IllegalArgumentException(
 						JGitText.get().pathNotConfigured);
 			try {
-				inputStream = new FileInputStream(manifestPath);
+				inputStream = Files.newInputStream(Paths.get(manifestPath));
 			} catch (IOException e) {
 				throw new IllegalArgumentException(
 						JGitText.get().pathNotConfigured);

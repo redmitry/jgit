@@ -44,10 +44,11 @@
 
 package org.eclipse.jgit.transport;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -266,8 +267,13 @@ class WalkFetchConnection extends BaseFetchConnection {
 		inserter.close();
 		reader.close();
 		for (RemotePack p : unfetchedPacks) {
-			if (p.tmpIdx != null)
-				p.tmpIdx.delete();
+			if (p.tmpIdx != null) {
+                                try {
+                                    Files.deleteIfExists(p.tmpIdx);
+                                } catch(IOException ex) {
+                                    // do nothing
+                                }
+                        }
 		}
 		for (WalkRemoteObjectDatabase r : remotes)
 			r.close();
@@ -574,7 +580,7 @@ class WalkFetchConnection extends BaseFetchConnection {
 				// the object, but after indexing we didn't
 				// actually find it in the pack.
 				//
-				recordError(id, new FileNotFoundException(MessageFormat.format(
+				recordError(id, new NoSuchFileException(MessageFormat.format(
 						JGitText.get().objectNotFoundIn, id.name(), pack.packName)));
 				continue;
 			}
@@ -610,7 +616,7 @@ class WalkFetchConnection extends BaseFetchConnection {
 			final byte[] compressed = remote.open(looseName).toArray();
 			verifyAndInsertLooseObject(id, compressed);
 			return true;
-		} catch (FileNotFoundException e) {
+		} catch (NoSuchFileException e) {
 			// Not available in a loose format from this alternate?
 			// Try another strategy to get the object.
 			//
@@ -638,9 +644,8 @@ class WalkFetchConnection extends BaseFetchConnection {
 			// and attempt to recover by getting the object from another
 			// source.
 			//
-			final FileNotFoundException e;
-			e = new FileNotFoundException(id.name());
-			e.initCause(parsingError);
+                        NoSuchFileException e = new NoSuchFileException(id.name());
+                        e.initCause(parsingError);
 			throw e;
 		}
 
@@ -809,7 +814,7 @@ class WalkFetchConnection extends BaseFetchConnection {
 
 		final String idxName;
 
-		File tmpIdx;
+		Path tmpIdx;
 
 		PackIndex index;
 
@@ -825,22 +830,21 @@ class WalkFetchConnection extends BaseFetchConnection {
 				tn = tn.substring(0, tn.length() - 4);
 
 			if (local.getObjectDatabase() instanceof ObjectDirectory) {
-				tmpIdx = new File(((ObjectDirectory) local.getObjectDatabase())
-								.getDirectory(),
-						"walk-" + tn + ".walkidx"); //$NON-NLS-1$ //$NON-NLS-2$
+                                tmpIdx = ((ObjectDirectory) local.getObjectDatabase())
+                                        .getDirectoryPath().resolve("walk-" + tn + ".walkidx"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
 
 		void openIndex(ProgressMonitor pm) throws IOException {
 			if (index != null)
 				return;
-			if (tmpIdx == null)
-				tmpIdx = File.createTempFile("jgit-walk-", ".idx"); //$NON-NLS-1$ //$NON-NLS-2$
-			else if (tmpIdx.isFile()) {
+			if (tmpIdx == null) {
+                                tmpIdx = Files.createTempFile("jgit-walk-", ".idx"); //$NON-NLS-1$ //$NON-NLS-2$
+                        } else if (Files.isRegularFile(tmpIdx)) {
 				try {
 					index = PackIndex.open(tmpIdx);
 					return;
-				} catch (FileNotFoundException err) {
+				} catch (NoSuchFileException err) {
 					// Fall through and get the file.
 				}
 			}
@@ -850,7 +854,7 @@ class WalkFetchConnection extends BaseFetchConnection {
 			pm.beginTask("Get " + idxName.substring(0, 12) + "..idx", //$NON-NLS-1$ //$NON-NLS-2$
 					s.length < 0 ? ProgressMonitor.UNKNOWN
 							: (int) (s.length / 1024));
-			try (FileOutputStream fos = new FileOutputStream(tmpIdx)) {
+			try (OutputStream fos = Files.newOutputStream(tmpIdx)) {
 				final byte[] buf = new byte[2048];
 				int cnt;
 				while (!pm.isCancelled() && (cnt = s.in.read(buf)) >= 0) {

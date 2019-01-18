@@ -45,7 +45,7 @@ package org.eclipse.jgit.transport;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
@@ -93,9 +93,9 @@ public class HMACSHA1NonceGenerator implements NonceGenerator {
 		if (repo instanceof DfsRepository) {
 			path = ((DfsRepository) repo).getDescription().getRepositoryName();
 		} else {
-			File directory = repo.getDirectory();
+			final Path directory = repo.getDirectoryPath();
 			if (directory != null) {
-				path = directory.getPath();
+				path = directory.toString();
 			} else {
 				throw new IllegalStateException();
 			}

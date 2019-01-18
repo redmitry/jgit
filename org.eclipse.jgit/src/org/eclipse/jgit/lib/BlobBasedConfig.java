@@ -45,10 +45,11 @@
 
 package org.eclipse.jgit.lib;
 
+import java.io.FileNotFoundException;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.errors.ConfigInvalidException;
@@ -154,7 +155,7 @@ public class BlobBasedConfig extends Config {
 		try (ObjectReader or = db.newObjectReader()) {
 			TreeWalk tree = TreeWalk.forPath(or, path, asTree(or, treeish));
 			if (tree == null)
-				throw new FileNotFoundException(MessageFormat.format(JGitText
+				throw new NoSuchFileException(MessageFormat.format(JGitText
 						.get().entryNotFoundByPath, path));
 			return read(or, tree.getObjectId(0));
 		}

@@ -43,8 +43,8 @@
  */
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.attributes.AttributesNode;
 import org.eclipse.jgit.lib.CoreConfig;
@@ -80,12 +80,12 @@ public class GlobalAttributesNode extends AttributesNode {
 		String path = repository.getConfig().get(CoreConfig.KEY)
 				.getAttributesFile();
 		if (path != null) {
-			File attributesFile;
+			Path attributesFile;
 			if (path.startsWith("~/")) { //$NON-NLS-1$
-				attributesFile = fs.resolve(fs.userHome(),
+				attributesFile = fs.resolve(fs.userHomePath(),
 						path.substring(2));
 			} else {
-				attributesFile = fs.resolve(null, path);
+				attributesFile = fs.resolve((Path)null, path);
 			}
 			FileRepository.AttributesNodeProviderImpl.loadRulesFromFile(r, attributesFile);
 		}

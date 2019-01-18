@@ -44,6 +44,9 @@ package org.eclipse.jgit.submodule;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Map;
@@ -200,7 +203,7 @@ public class SubmoduleWalk implements AutoCloseable {
 	}
 
 	/**
-	 * Get submodule directory
+	 * @deprecated use {@link #getSubmoduleDirectoryPath(Repository, String)}
 	 *
 	 * @param parent
 	 *            the {@link org.eclipse.jgit.lib.Repository}.
@@ -210,7 +213,21 @@ public class SubmoduleWalk implements AutoCloseable {
 	 */
 	public static File getSubmoduleDirectory(final Repository parent,
 			final String path) {
-		return new File(parent.getWorkTree(), path);
+		return getSubmoduleDirectoryPath(parent, path).toFile();
+	}
+        
+	/**
+	 * Get submodule directory
+	 *
+	 * @param parent
+	 *            the {@link org.eclipse.jgit.lib.Repository}.
+	 * @param path
+	 *            submodule path
+	 * @return directory
+	 */
+	public static Path getSubmoduleDirectoryPath(final Repository parent,
+			final String path) {
+		return parent.getWorkTreePath().resolve(path);
 	}
 
 	/**
@@ -225,12 +242,12 @@ public class SubmoduleWalk implements AutoCloseable {
 	 */
 	public static Repository getSubmoduleRepository(final Repository parent,
 			final String path) throws IOException {
-		return getSubmoduleRepository(parent.getWorkTree(), path,
+		return getSubmoduleRepository(parent.getWorkTreePath(), path,
 				parent.getFS());
 	}
 
 	/**
-	 * Get submodule repository at path
+	 * @deprecated use {@link #getSubmoduleRepository(Path, String)}
 	 *
 	 * @param parent
 	 *            the parent
@@ -242,6 +259,37 @@ public class SubmoduleWalk implements AutoCloseable {
 	public static Repository getSubmoduleRepository(final File parent,
 			final String path) throws IOException {
 		return getSubmoduleRepository(parent, path, FS.DETECTED);
+	}
+        
+	/**
+	 * Get submodule repository at path
+	 *
+	 * @param parent
+	 *            the parent
+	 * @param path
+	 *            submodule path
+	 * @return repository or null if repository doesn't exist
+	 * @throws java.io.IOException
+	 */
+	public static Repository getSubmoduleRepository(final Path parent,
+			final String path) throws IOException {
+		return getSubmoduleRepository(parent, path, FS.DETECTED);
+	}
+
+	/**
+	 * @deprecated use {@link #getSubmoduleRepository(Path, String, FS)}
+	 *
+	 * @param parent
+	 * @param path
+	 * @param fs
+	 *            the file system abstraction to be used
+	 * @return repository or null if repository doesn't exist
+	 * @throws IOException
+	 * @since 4.10
+	 */
+	public static Repository getSubmoduleRepository(final File parent,
+			final String path, FS fs) throws IOException {
+                return getSubmoduleRepository(parent.toPath(), path, fs);
 	}
 
 	/**
@@ -256,17 +304,18 @@ public class SubmoduleWalk implements AutoCloseable {
 	 * @throws IOException
 	 * @since 4.10
 	 */
-	public static Repository getSubmoduleRepository(final File parent,
+	public static Repository getSubmoduleRepository(final Path parent,
 			final String path, FS fs) throws IOException {
-		File subWorkTree = new File(parent, path);
-		if (!subWorkTree.isDirectory())
+		Path subWorkTree = parent.resolve(path);
+		if (!Files.isDirectory(subWorkTree)) {
 			return null;
-		File workTree = new File(parent, path);
+                }
+
 		try {
 			return new RepositoryBuilder() //
 					.setMustExist(true) //
 					.setFS(fs) //
-					.setWorkTree(workTree) //
+					.setWorkTree(subWorkTree) //
 					.build();
 		} catch (RepositoryNotFoundException e) {
 			return null;
@@ -317,9 +366,9 @@ public class SubmoduleWalk implements AutoCloseable {
 
 		// Fall back to parent repository's working directory if no remote URL
 		if (remoteUrl == null) {
-			remoteUrl = parent.getWorkTree().getAbsolutePath();
-			// Normalize slashes to '/'
-			if ('\\' == File.separatorChar)
+			remoteUrl = parent.getWorkTreePath().toAbsolutePath().toString();
+			// Normalize slashes to '/' !!!default file system!!!
+			if ("\\".equals(FileSystems.getDefault().getSeparator()))
 				remoteUrl = remoteUrl.replace('\\', '/');
 		}
 
@@ -452,8 +501,7 @@ public class SubmoduleWalk implements AutoCloseable {
 	 */
 	public SubmoduleWalk loadModulesConfig() throws IOException, ConfigInvalidException {
 		if (rootTree == null) {
-			File modulesFile = new File(repository.getWorkTree(),
-					Constants.DOT_GIT_MODULES);
+			Path modulesFile = repository.getWorkTreePath().resolve(Constants.DOT_GIT_MODULES);
 			FileBasedConfig config = new FileBasedConfig(modulesFile,
 					repository.getFS());
 			config.load();
@@ -525,9 +573,8 @@ public class SubmoduleWalk implements AutoCloseable {
 		if (repository.isBare()) {
 			return false;
 		}
-		File modulesFile = new File(repository.getWorkTree(),
-				Constants.DOT_GIT_MODULES);
-		return (modulesFile.exists());
+		final Path modulesFile = repository.getWorkTreePath().resolve(Constants.DOT_GIT_MODULES);
+		return Files.exists(modulesFile);
 	}
 
 	private void lazyLoadModulesConfig() throws IOException, ConfigInvalidException {
@@ -599,12 +646,21 @@ public class SubmoduleWalk implements AutoCloseable {
 	}
 
 	/**
-	 * Get directory that will be the root of the submodule's local repository
+	 * @deprecated use {@link #getDirectoryPath()}
 	 *
 	 * @return submodule repository directory
 	 */
 	public File getDirectory() {
 		return getSubmoduleDirectory(repository, path);
+	}
+
+	/**
+	 * Get directory that will be the root of the submodule's local repository
+	 *
+	 * @return submodule repository directory
+	 */
+	public Path getDirectoryPath() {
+		return getSubmoduleDirectoryPath(repository, path);
 	}
 
 	/**

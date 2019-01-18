@@ -45,10 +45,17 @@ package org.eclipse.jgit.api;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.annotations.Nullable;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -77,7 +84,6 @@ import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.RemoteConfig;
 import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.URIish;
-import org.eclipse.jgit.util.FileUtils;
 import org.eclipse.jgit.util.FS;
 
 /**
@@ -90,9 +96,9 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 
 	private String uri;
 
-	private File directory;
+	private Path directory;
 
-	private File gitDir;
+	private Path gitDir;
 
 	private boolean bare;
 
@@ -158,14 +164,14 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	public CloneCommand() {
 		super(null);
 	}
-
+        
 	/**
 	 * Get the git directory. This is primarily used for tests.
 	 *
 	 * @return the git directory
 	 */
 	@Nullable
-	File getDirectory() {
+	Path getDirectoryPath() {
 		return directory;
 	}
 
@@ -234,28 +240,28 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 		return new Git(repository, true);
 	}
 
-	private static boolean isNonEmptyDirectory(File dir) {
-		if (dir != null && dir.exists()) {
-			File[] files = dir.listFiles();
-			return files != null && files.length != 0;
-		}
-		return false;
+	private static boolean isNonEmptyDirectory(Path dir) {
+            try {
+                return dir != null && Files.exists(dir, new LinkOption[0]) && Files.list(dir).iterator().hasNext();
+            } catch (IOException ex) {
+                return false;
+            }
 	}
 
 	void verifyDirectories(URIish u) {
 		if (directory == null && gitDir == null) {
-			directory = new File(u.getHumanishName() + (bare ? Constants.DOT_GIT_EXT : "")); //$NON-NLS-1$
+			directory = Paths.get(u.getHumanishName(), bare ? Constants.DOT_GIT_EXT : ""); //$NON-NLS-1$
 		}
-		directoryExistsInitially = directory != null && directory.exists();
-		gitDirExistsInitially = gitDir != null && gitDir.exists();
+		directoryExistsInitially = directory != null && Files.exists(directory, new LinkOption[0]);
+		gitDirExistsInitially = gitDir != null &&  Files.exists(gitDir, new LinkOption[0]);
 		validateDirs(directory, gitDir, bare);
 		if (isNonEmptyDirectory(directory)) {
 			throw new JGitInternalException(MessageFormat.format(
-					JGitText.get().cloneNonEmptyDirectory, directory.getName()));
+					JGitText.get().cloneNonEmptyDirectory, directory));
 		}
 		if (isNonEmptyDirectory(gitDir)) {
 			throw new JGitInternalException(MessageFormat.format(
-					JGitText.get().cloneNonEmptyDirectory, gitDir.getName()));
+					JGitText.get().cloneNonEmptyDirectory, gitDir));
 		}
 	}
 
@@ -461,6 +467,23 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	}
 
 	/**
+         * @deprecated use {@link #setDirectory(Path)}
+         *
+	 * @param directory
+	 *            the directory to clone to, or {@code null} if the directory
+	 *            name should be taken from the source uri
+	 * @return this instance
+	 * @throws java.lang.IllegalStateException
+	 *             if the combination of directory, gitDir and bare is illegal.
+	 *             E.g. if for a non-bare repository directory and gitDir point
+	 *             to the same directory of if for a bare repository both
+	 *             directory and gitDir are specified
+	 */
+	public CloneCommand setDirectory(File directory) {
+                return setDirectory(directory.toPath());
+	}
+
+	/**
 	 * The optional directory associated with the clone operation. If the
 	 * directory isn't set, a name associated with the source uri will be used.
 	 *
@@ -475,12 +498,29 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	 *             to the same directory of if for a bare repository both
 	 *             directory and gitDir are specified
 	 */
-	public CloneCommand setDirectory(File directory) {
+	public CloneCommand setDirectory(Path directory) {
 		validateDirs(directory, gitDir, bare);
 		this.directory = directory;
 		return this;
 	}
 
+	/**
+	 * @deprecated use {@link #setGitDir(Path)}
+	 *
+	 * @param gitDir
+	 *            the repository meta directory, or {@code null} to choose one
+	 *            automatically at clone time
+	 * @return this instance
+	 * @throws java.lang.IllegalStateException
+	 *             if the combination of directory, gitDir and bare is illegal.
+	 *             E.g. if for a non-bare repository directory and gitDir point
+	 *             to the same directory of if for a bare repository both
+	 *             directory and gitDir are specified
+	 */
+	public CloneCommand setGitDir(File gitDir) {
+                return setGitDir(gitDir.toPath());
+	}
+        
 	/**
 	 * Set the repository meta directory (.git)
 	 *
@@ -495,7 +535,7 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	 *             directory and gitDir are specified
 	 * @since 3.6
 	 */
-	public CloneCommand setGitDir(File gitDir) {
+	public CloneCommand setGitDir(Path gitDir) {
 		validateDirs(directory, gitDir, bare);
 		this.gitDir = gitDir;
 		return this;
@@ -656,14 +696,14 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 		return this;
 	}
 
-	private static void validateDirs(File directory, File gitDir, boolean bare)
+	private static void validateDirs(Path directory, Path gitDir, boolean bare)
 			throws IllegalStateException {
 		if (directory != null) {
-			if (directory.exists() && !directory.isDirectory()) {
+			if (Files.exists(directory, new LinkOption[0]) && !Files.isDirectory(directory, new LinkOption[0])) {
 				throw new IllegalStateException(MessageFormat.format(
 						JGitText.get().initFailedDirIsNoDirectory, directory));
 			}
-			if (gitDir != null && gitDir.exists() && !gitDir.isDirectory()) {
+			if (gitDir != null && Files.exists(gitDir, new LinkOption[0]) && !Files.isDirectory(gitDir, new LinkOption[0])) {
 				throw new IllegalStateException(MessageFormat.format(
 						JGitText.get().initFailedGitDirIsNoDirectory,
 						gitDir));
@@ -685,35 +725,30 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	private void cleanup() {
 		try {
 			if (directory != null) {
-				if (!directoryExistsInitially) {
-					FileUtils.delete(directory, FileUtils.RECURSIVE
-							| FileUtils.SKIP_MISSING | FileUtils.IGNORE_ERRORS);
-				} else {
-					deleteChildren(directory);
-				}
+                                Stream<Path> files = Files.walk(directory, FileVisitOption.FOLLOW_LINKS);
+                                if (directoryExistsInitially) {
+                                    files = files.filter(file -> file != directory);
+                                }
+                                files.sorted(Comparator.reverseOrder())
+                                        .forEach(path -> {
+                                                try { Files.delete(path); }
+                                                catch (IOException ex) {}
+                                        });
 			}
 			if (gitDir != null) {
-				if (!gitDirExistsInitially) {
-					FileUtils.delete(gitDir, FileUtils.RECURSIVE
-							| FileUtils.SKIP_MISSING | FileUtils.IGNORE_ERRORS);
-				} else {
-					deleteChildren(directory);
-				}
+                                Stream<Path> files = Files.walk(gitDir, FileVisitOption.FOLLOW_LINKS);
+                                if (gitDirExistsInitially) {
+                                    files = files.filter(file -> file != gitDir);
+                                }
+                                files.sorted(Comparator.reverseOrder())
+                                        .forEach(path -> {
+                                                try { Files.delete(path); }
+                                                catch (IOException ex) {}
+                                        });
 			}
 		} catch (IOException e) {
 			// Ignore; this is a best-effort cleanup in error cases, and
 			// IOException should not be raised anyway
-		}
-	}
-
-	private void deleteChildren(File file) throws IOException {
-		File[] files = file.listFiles();
-		if (files == null) {
-			return;
-		}
-		for (File child : files) {
-			FileUtils.delete(child, FileUtils.RECURSIVE | FileUtils.SKIP_MISSING
-					| FileUtils.IGNORE_ERRORS);
 		}
 	}
 }

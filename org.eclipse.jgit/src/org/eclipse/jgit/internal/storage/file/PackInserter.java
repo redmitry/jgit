@@ -50,14 +50,16 @@ import static org.eclipse.jgit.lib.Constants.OBJ_REF_DELTA;
 
 import java.io.BufferedInputStream;
 import java.io.EOFException;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.util.Collection;
 import java.util.Collections;
@@ -111,7 +113,7 @@ public class PackInserter extends ObjectInserter {
 	private boolean checkExisting = true;
 
 	private int compression = Deflater.BEST_COMPRESSION;
-	private File tmpPack;
+	private Path tmpPack;
 	private PackStream packOut;
 	private Inflater cachedInflater;
 
@@ -212,11 +214,9 @@ public class PackInserter extends ObjectInserter {
 		return id;
 	}
 
-	private static File idxFor(File packFile) {
-		String p = packFile.getName();
-		return new File(
-				packFile.getParentFile(),
-				p.substring(0, p.lastIndexOf('.')) + ".idx"); //$NON-NLS-1$
+	private static Path idxFor(Path packFile) {
+		String p = packFile.getFileName().toString();
+                return packFile.resolveSibling(p.substring(0, p.lastIndexOf('.')) + ".idx"); //$NON-NLS-1$
 	}
 
 	private void beginPack() throws IOException {
@@ -224,7 +224,7 @@ public class PackInserter extends ObjectInserter {
 		objectMap = new ObjectIdOwnerMap<>();
 
 		rollback = true;
-		tmpPack = File.createTempFile("insert_", ".pack", db.getDirectory()); //$NON-NLS-1$ //$NON-NLS-2$
+                tmpPack = Files.createTempFile(db.getDirectoryPath(), "insert_", ".pack");
 		packOut = new PackStream(tmpPack);
 
 		// Write the header as though it were a single object pack.
@@ -269,22 +269,23 @@ public class PackInserter extends ObjectInserter {
 		}
 
 		Collections.sort(objectList);
-		File tmpIdx = idxFor(tmpPack);
+		Path tmpIdx = idxFor(tmpPack);
 		writePackIndex(tmpIdx, packHash, objectList);
 
-		File realPack = new File(db.getPackDirectory(),
-				"pack-" + computeName(objectList).name() + ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
+                Path realPack = db.getPackDirectoryPath()
+                        .resolve("pack-" + computeName(objectList).name() + ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
+
+				
 		db.closeAllPackHandles(realPack);
-		tmpPack.setReadOnly();
+                FileUtils.setReadOnly(realPack, true);
 		FileUtils.rename(tmpPack, realPack, ATOMIC_MOVE);
 
-		File realIdx = idxFor(realPack);
-		tmpIdx.setReadOnly();
+		Path realIdx = idxFor(realPack);
+                FileUtils.setReadOnly(tmpIdx, true);
 		try {
 			FileUtils.rename(tmpIdx, realIdx, ATOMIC_MOVE);
 		} catch (IOException e) {
-			File newIdx = new File(
-					realIdx.getParentFile(), realIdx.getName() + ".new"); //$NON-NLS-1$
+                        Path newIdx = realIdx.resolveSibling(realIdx.getFileName() + ".new");
 			try {
 				FileUtils.rename(tmpIdx, newIdx, ATOMIC_MOVE);
 			} catch (IOException e2) {
@@ -301,9 +302,9 @@ public class PackInserter extends ObjectInserter {
 		clear();
 	}
 
-	private static void writePackIndex(File idx, byte[] packHash,
+	private static void writePackIndex(Path idx, byte[] packHash,
 			List<PackedObjectInfo> list) throws IOException {
-		try (OutputStream os = new FileOutputStream(idx)) {
+		try (OutputStream os = Files. newOutputStream(idx, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
 			PackIndexWriter w = PackIndexWriter.createVersion(os, INDEX_VERSION);
 			w.write(list, packHash);
 		}
@@ -388,15 +389,17 @@ public class PackInserter extends ObjectInserter {
 		final CRC32 crc32;
 		final DeflaterOutputStream compress;
 
-		private final RandomAccessFile file;
+		private final SeekableByteChannel file;
 		private final CountingOutputStream out;
 		private final Deflater deflater;
 
 		private boolean atEnd;
 
-		PackStream(File pack) throws IOException {
-			file = new RandomAccessFile(pack, "rw"); //$NON-NLS-1$
-			out = new CountingOutputStream(new FileOutputStream(file.getFD()));
+		PackStream(Path pack) throws IOException {
+                        file = Files.newByteChannel(pack, 
+                                StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+
+			out = new CountingOutputStream(Files.newOutputStream(pack));
 			deflater = new Deflater(compression);
 			compress = new DeflaterOutputStream(this, deflater, 8192);
 			hdrBuf = new byte[32];
@@ -414,7 +417,7 @@ public class PackInserter extends ObjectInserter {
 		}
 
 		void seek(long offset) throws IOException {
-			file.seek(offset);
+			file.position(offset);
 			atEnd = false;
 		}
 
@@ -447,7 +450,7 @@ public class PackInserter extends ObjectInserter {
 		public void write(byte[] data, int off, int len) throws IOException {
 			crc32.update(data, off, len);
 			if (!atEnd) {
-				file.seek(file.length());
+				file.position(file.size());
 				atEnd = true;
 			}
 			out.write(data, off, len);
@@ -460,18 +463,21 @@ public class PackInserter extends ObjectInserter {
 			// pointer, and out's counter in an inconsistent state; that's ok, since
 			// this method closes the file anyway.
 			try {
-				file.seek(0);
+				file.position(0);
 				out.write(hdrBuf, 0, writePackHeader(hdrBuf, objectList.size()));
 
-				byte[] buf = buffer();
+				final byte[] arr = buffer();
+                                final ByteBuffer buf = ByteBuffer.wrap(arr);
+                                
 				SHA1 md = digest().reset();
-				file.seek(0);
+				file.position(0);
 				while (true) {
+                                        buf.rewind();
 					int r = file.read(buf);
 					if (r < 0) {
 						break;
 					}
-					md.update(buf, 0, r);
+					md.update(arr, 0, r);
 				}
 				byte[] packHash = md.digest();
 				out.write(packHash, 0, packHash.length);
@@ -516,16 +522,17 @@ public class PackInserter extends ObjectInserter {
 			}
 		}
 
-		private int setInput(long filePos, Inflater inf, byte[] buf)
+		private int setInput(long filePos, Inflater inf, byte[] arr)
 				throws IOException {
-			if (file.getFilePointer() != filePos) {
+			if (file.position() != filePos) {
 				seek(filePos);
 			}
+                        final ByteBuffer buf = ByteBuffer.wrap(arr);
 			int n = file.read(buf);
 			if (n < 0) {
 				throw new EOFException(JGitText.get().unexpectedEofInPack);
 			}
-			inf.setInput(buf, 0, n);
+			inf.setInput(arr, 0, n);
 			return n;
 		}
 	}
@@ -579,14 +586,18 @@ public class PackInserter extends ObjectInserter {
 				return ctx.open(objectId, typeHint);
 			}
 
-			byte[] buf = buffer();
+			
 			packOut.seek(obj.getOffset());
-			int cnt = packOut.file.read(buf, 0, 20);
+                        
+                        final byte[] arr = buffer();
+                        final ByteBuffer buf = ByteBuffer.wrap(arr, 0, 20);
+                        
+			int cnt = packOut.file.read(buf);
 			if (cnt <= 0) {
 				throw new EOFException(JGitText.get().unexpectedEofInPack);
 			}
 
-			int c = buf[0] & 0xff;
+			int c = arr[0] & 0xff;
 			int type = (c >> 4) & 7;
 			if (type == OBJ_OFS_DELTA || type == OBJ_REF_DELTA) {
 				throw new IOException(MessageFormat.format(
@@ -603,7 +614,7 @@ public class PackInserter extends ObjectInserter {
 				if (ptr >= cnt) {
 					throw new EOFException(JGitText.get().unexpectedEofInPack);
 				}
-				c = buf[ptr++] & 0xff;
+				c = arr[ptr++] & 0xff;
 				sz += ((long) (c & 0x7f)) << shift;
 				shift += 7;
 			}
@@ -627,7 +638,7 @@ public class PackInserter extends ObjectInserter {
 						MessageFormat.format(
 								JGitText.get().objectAtHasBadZlibStream,
 								Long.valueOf(obj.getOffset()),
-								tmpPack.getAbsolutePath()),
+								tmpPack.toAbsolutePath()),
 						dfe);
 			}
 		}
@@ -660,7 +671,7 @@ public class PackInserter extends ObjectInserter {
 				packOut.seek(pos);
 
 				InputStream fileStream = new FilterInputStream(
-						Channels.newInputStream(packOut.file.getChannel())) {
+						Channels.newInputStream(packOut.file)) {
 							// atEnd was already set to false by the previous seek, but it's
 							// technically possible for a caller to call insert on the
 							// inserter in the middle of reading from this stream. Behavior is

@@ -55,8 +55,12 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.Charset;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.text.MessageFormat;
@@ -92,7 +96,7 @@ public abstract class FS {
 
 	/**
 	 * An empty array of entries, suitable as a return value for
-	 * {@link #list(File, FileModeStrategy)}.
+	 * {@link #list(Path, FileModeStrategy)}.
 	 *
 	 * @since 5.0
 	 */
@@ -220,9 +224,9 @@ public abstract class FS {
 		return factory.detect(cygwinUsed);
 	}
 
-	private volatile Holder<File> userHome;
+	private volatile Holder<Path> userHome;
 
-	private volatile Holder<File> gitSystemConfig;
+	private volatile Holder<Path> gitSystemConfig;
 
 	/**
 	 * Constructs a file system abstraction.
@@ -291,6 +295,15 @@ public abstract class FS {
 	public abstract boolean isCaseSensitive();
 
 	/**
+	 * @deprecated use {@link #canExecute(Path)}
+	 *
+	 * @param f
+	 *            abstract path to test.
+	 * @return true if the file is believed to be executable by the user.
+	 */
+	public abstract boolean canExecute(File f);
+        
+	/**
 	 * Determine if the file is executable (or not).
 	 * <p>
 	 * Not all platforms and JREs support executable flags on files. If the
@@ -304,7 +317,18 @@ public abstract class FS {
 	 *            abstract path to test.
 	 * @return true if the file is believed to be executable by the user.
 	 */
-	public abstract boolean canExecute(File f);
+	public abstract boolean canExecute(Path f);
+
+	/**
+	 * @deprecated use {@link #setExecute(Path, boolean)}
+	 *
+	 * @param f
+	 *            path to modify the executable status of.
+	 * @param canExec
+	 *            true to enable execution; false to disable it.
+	 * @return true if the change succeeded; false otherwise.
+	 */
+	public abstract boolean setExecute(File f, boolean canExec);
 
 	/**
 	 * Set a file to be executable by the user.
@@ -319,7 +343,20 @@ public abstract class FS {
 	 *            true to enable execution; false to disable it.
 	 * @return true if the change succeeded; false otherwise.
 	 */
-	public abstract boolean setExecute(File f, boolean canExec);
+	public abstract boolean setExecute(Path f, boolean canExec);
+
+	/**
+	 * @deprecated use {@link #lastModified(Path)}
+	 *
+	 * @param f
+	 *            a {@link java.io.File} object.
+	 * @return last modified time of f
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public long lastModified(File f) throws IOException {
+		return lastModified(f.toPath());
+	}
 
 	/**
 	 * Get the last modified time of a file system object. If the OS/JRE support
@@ -332,13 +369,13 @@ public abstract class FS {
 	 * @throws java.io.IOException
 	 * @since 3.0
 	 */
-	public long lastModified(File f) throws IOException {
-		return FileUtils.lastModified(f);
+	public long lastModified(Path f) throws IOException {
+                return Files.getLastModifiedTime(f, LinkOption.NOFOLLOW_LINKS)
+				.toMillis();
 	}
 
 	/**
-	 * Set the last modified time of a file system object. If the OS/JRE support
-	 * symbolic links, the link is modified, not the target,
+	 * @deprecated use {@link #setLastModified(Path, long)}
 	 *
 	 * @param f
 	 *            a {@link java.io.File} object.
@@ -352,8 +389,22 @@ public abstract class FS {
 	}
 
 	/**
-	 * Get the length of a file or link, If the OS/JRE supports symbolic links
-	 * it's the length of the link, else the length of the target.
+	 * Set the last modified time of a file system object. If the OS/JRE support
+	 * symbolic links, the link is modified, not the target,
+	 *
+	 * @param f
+	 *            a {@link java.io.File} object.
+	 * @param time
+	 *            last modified time
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public void setLastModified(Path f, long time) throws IOException {
+		FileUtils.setLastModified(f, time);
+	}
+
+	/**
+	 * @deprecated use {@link #length(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -366,7 +417,21 @@ public abstract class FS {
 	}
 
 	/**
-	 * Delete a file. Throws an exception if delete fails.
+	 * Get the length of a file or link, If the OS/JRE supports symbolic links
+	 * it's the length of the link, else the length of the target.
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return length of a file
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public long length(Path path) throws IOException {
+		return FileUtils.getLength(path);
+	}
+
+	/**
+	 * @deprecated use {@link #delete(Path)}
 	 *
 	 * @param f
 	 *            a {@link java.io.File} object.
@@ -376,6 +441,36 @@ public abstract class FS {
 	 */
 	public void delete(File f) throws IOException {
 		FileUtils.delete(f);
+	}
+
+	/**
+	 * Delete a file. Throws an exception if delete fails.
+	 *
+	 * @param f
+	 *            a {@link java.io.File} object.
+	 * @throws java.io.IOException
+	 *             this may be a Java7 subclass with detailed information
+	 * @since 3.3
+	 */
+	public void delete(Path f) throws IOException {
+		FileUtils.delete(f);
+	}
+
+	/**
+	 * @deprecated use {@link #resolve(Path, String)}
+	 *
+	 * @param dir
+	 *            directory relative to which the path name is.
+	 * @param name
+	 *            path name to translate.
+	 * @return the translated path. <code>new File(dir,name)</code> if this
+	 *         platform does not require path name translation.
+	 */
+	public File resolve(File dir, String name) {
+		final File abspn = new File(name);
+		if (abspn.isAbsolute())
+			return abspn;
+		return new File(dir, name);
 	}
 
 	/**
@@ -396,11 +491,27 @@ public abstract class FS {
 	 * @return the translated path. <code>new File(dir,name)</code> if this
 	 *         platform does not require path name translation.
 	 */
-	public File resolve(File dir, String name) {
-		final File abspn = new File(name);
-		if (abspn.isAbsolute())
-			return abspn;
-		return new File(dir, name);
+	public Path resolve(Path dir, String name) {
+            
+                Path file = Paths.get(name);
+                if (file.isAbsolute()) {
+                        return file;
+                }
+                return dir.resolve(name);
+	}
+        
+	/**
+	 * @deprecated use {@link #userHomePath()}
+	 *
+	 * @return the user's home directory; null if the user does not have one.
+	 */
+	public File userHome() {
+		Holder<Path> p = userHome;
+		if (p == null) {
+			p = new Holder<>(userHomeImpl());
+			userHome = p;
+		}
+		return p.value.toFile();
 	}
 
 	/**
@@ -414,8 +525,8 @@ public abstract class FS {
 	 *
 	 * @return the user's home directory; null if the user does not have one.
 	 */
-	public File userHome() {
-		Holder<File> p = userHome;
+	public Path userHomePath() {
+		Holder<Path> p = userHome;
 		if (p == null) {
 			p = new Holder<>(userHomeImpl());
 			userHome = p;
@@ -424,7 +535,7 @@ public abstract class FS {
 	}
 
 	/**
-	 * Set the user's home directory location.
+	 * @deprecated use {@link #setUserHome(Path)}
 	 *
 	 * @param path
 	 *            the location of the user's preferences; null if there is no
@@ -432,10 +543,21 @@ public abstract class FS {
 	 * @return {@code this}.
 	 */
 	public FS setUserHome(File path) {
+                return setUserHome(path.toPath());
+	}
+        
+	/**
+	 * Set the user's home directory location.
+	 *
+	 * @param path
+	 *            the location of the user's preferences; null if there is no
+	 *            home directory for the current user.
+	 * @return {@code this}.
+	 */
+	public FS setUserHome(Path path) {
 		userHome = new Holder<>(path);
 		return this;
 	}
-
 	/**
 	 * Does this file system have problems with atomic renames?
 	 *
@@ -448,7 +570,7 @@ public abstract class FS {
 	 *
 	 * @return the user's home directory; null if the user does not have one.
 	 */
-	protected File userHomeImpl() {
+	protected Path userHomeImpl() {
 		final String home = AccessController
 				.doPrivileged(new PrivilegedAction<String>() {
 					@Override
@@ -458,7 +580,7 @@ public abstract class FS {
 				});
 		if (home == null || home.length() == 0)
 			return null;
-		return new File(home).getAbsoluteFile();
+		return Paths.get(home).toAbsolutePath();
 	}
 
 	/**
@@ -472,17 +594,17 @@ public abstract class FS {
 	 * @return the first match found, or null
 	 * @since 3.0
 	 */
-	protected static File searchPath(String path, String... lookFor) {
-		if (path == null)
-			return null;
-
-		for (String p : path.split(File.pathSeparator)) {
-			for (String command : lookFor) {
-				final File e = new File(p, command);
-				if (e.isFile())
-					return e.getAbsoluteFile();
-			}
-		}
+	protected static Path searchPath(String path, String... lookFor) {
+		if (path != null) {
+                    for (String p : path.split(File.pathSeparator)) {
+                            for (String command : lookFor) {
+                                    final Path e = Paths.get(p, command);
+                                    if (Files.isRegularFile(e)) {
+                                            return e.toAbsolutePath();
+                                    }
+                            }
+                    }
+                }
 		return null;
 	}
 
@@ -501,7 +623,7 @@ public abstract class FS {
 	 *             thrown when the command failed (return code was non-zero)
 	 */
 	@Nullable
-	protected static String readPipe(File dir, String[] command,
+	protected static String readPipe(Path dir, String[] command,
 			String encoding) throws CommandFailedException {
 		return readPipe(dir, command, encoding, null);
 	}
@@ -525,7 +647,7 @@ public abstract class FS {
 	 * @since 4.0
 	 */
 	@Nullable
-	protected static String readPipe(File dir, String[] command,
+	protected static String readPipe(Path dir, String[] command,
 			String encoding, Map<String, String> env)
 			throws CommandFailedException {
 		final boolean debug = LOG.isDebugEnabled();
@@ -535,7 +657,7 @@ public abstract class FS {
 						+ dir);
 			}
 			ProcessBuilder pb = new ProcessBuilder(command);
-			pb.directory(dir);
+			pb.directory(dir.toFile());
 			if (env != null) {
 				pb.environment().putAll(env);
 			}
@@ -602,7 +724,7 @@ public abstract class FS {
 		final AtomicReference<String> errorMessage = new AtomicReference<>();
 		final AtomicReference<Throwable> exception = new AtomicReference<>();
 
-		GobblerThread(Process p, String[] command, File dir) {
+		GobblerThread(Process p, String[] command, Path dir) {
 			this.p = p;
 			this.desc = Arrays.toString(command);
 			this.dir = Objects.toString(dir);
@@ -668,7 +790,7 @@ public abstract class FS {
 	 *         determined.
 	 * @since 4.0
 	 */
-	protected abstract File discoverGitExe();
+	protected abstract Path discoverGitExe();
 
 	/**
 	 * Discover the path to the system-wide Git configuration file
@@ -677,8 +799,8 @@ public abstract class FS {
 	 *         {@code null} if it cannot be determined.
 	 * @since 4.0
 	 */
-	protected File discoverGitSystemConfig() {
-		File gitExe = discoverGitExe();
+	protected Path discoverGitSystemConfig() {
+		Path gitExe = discoverGitExe();
 		if (gitExe == null) {
 			return null;
 		}
@@ -686,7 +808,7 @@ public abstract class FS {
 		// Bug 480782: Check if the discovered git executable is JGit CLI
 		String v;
 		try {
-			v = readPipe(gitExe.getParentFile(),
+			v = readPipe(gitExe.getParent(),
 				new String[] { "git", "--version" }, //$NON-NLS-1$ //$NON-NLS-2$
 				Charset.defaultCharset().name());
 		} catch (CommandFailedException e) {
@@ -705,7 +827,7 @@ public abstract class FS {
 
 		String w;
 		try {
-			w = readPipe(gitExe.getParentFile(),
+			w = readPipe(gitExe.getParent(),
 				new String[] { "git", "config", "--system", "--edit" }, //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				Charset.defaultCharset().name(), env);
 		} catch (CommandFailedException e) {
@@ -716,11 +838,11 @@ public abstract class FS {
 			return null;
 		}
 
-		return new File(w);
+		return Paths.get(w);
 	}
 
 	/**
-	 * Get the currently used path to the system-wide Git configuration file.
+	 * @deprecated use {@link #getGitSystemConfigPath()}
 	 *
 	 * @return the currently used path to the system-wide Git configuration file
 	 *         or {@code null} if none has been set.
@@ -730,7 +852,33 @@ public abstract class FS {
 		if (gitSystemConfig == null) {
 			gitSystemConfig = new Holder<>(discoverGitSystemConfig());
 		}
+		return gitSystemConfig.value.toFile();
+	}
+
+	/**
+	 * Get the currently used path to the system-wide Git configuration file.
+	 *
+	 * @return the currently used path to the system-wide Git configuration file
+	 *         or {@code null} if none has been set.
+	 * @since 4.0
+	 */
+	public Path getGitSystemConfigPath() {
+		if (gitSystemConfig == null) {
+			gitSystemConfig = new Holder<>(discoverGitSystemConfig());
+		}
 		return gitSystemConfig.value;
+	}
+
+	/**
+	 * @deprecated use {@link #setGitSystemConfig(Path)}
+	 *
+	 * @param configFile
+	 *            the path to the config file.
+	 * @return {@code this}
+	 * @since 4.0
+	 */
+	public FS setGitSystemConfig(File configFile) {
+		return setGitSystemConfig(configFile.toPath());
 	}
 
 	/**
@@ -741,7 +889,7 @@ public abstract class FS {
 	 * @return {@code this}
 	 * @since 4.0
 	 */
-	public FS setGitSystemConfig(File configFile) {
+	public FS setGitSystemConfig(Path configFile) {
 		gitSystemConfig = new Holder<>(configFile);
 		return this;
 	}
@@ -755,17 +903,17 @@ public abstract class FS {
 	 *         {@code null} in case there's no grandparent directory
 	 * @since 4.0
 	 */
-	protected static File resolveGrandparentFile(File grandchild) {
+	protected static Path resolveGrandparentFile(Path grandchild) {
 		if (grandchild != null) {
-			File parent = grandchild.getParentFile();
+			Path parent = grandchild.getParent();
 			if (parent != null)
-				return parent.getParentFile();
+				return parent.getParent();
 		}
 		return null;
 	}
 
 	/**
-	 * Check if a file is a symbolic link and read it
+	 * @deprecated use {@link #readSymLink(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -778,7 +926,20 @@ public abstract class FS {
 	}
 
 	/**
-	 * Whether the path is a symbolic link (and we support these).
+	 * Check if a file is a symbolic link and read it
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return target of link or null
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public String readSymLink(Path path) throws IOException {
+		return FileUtils.readSymLink(path);
+	}
+
+	/**
+	 * @deprecated use {@link #isSymLink(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -788,6 +949,31 @@ public abstract class FS {
 	 */
 	public boolean isSymLink(File path) throws IOException {
 		return FileUtils.isSymlink(path);
+	}
+        
+	/**
+	 * Whether the path is a symbolic link (and we support these).
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return true if the path is a symbolic link (and we support these)
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public boolean isSymLink(Path path) throws IOException {
+		return FileUtils.isSymlink(path);
+	}
+
+	/**
+	 * @deprecated use {@link #exists(Path)}
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return true if path exists
+	 * @since 3.0
+	 */
+	public boolean exists(File path) {
+		return exists(path.toPath());
 	}
 
 	/**
@@ -799,13 +985,12 @@ public abstract class FS {
 	 * @return true if path exists
 	 * @since 3.0
 	 */
-	public boolean exists(File path) {
-		return FileUtils.exists(path);
+	public boolean exists(Path path) {
+            return Files.exists(path);
 	}
-
+        
 	/**
-	 * Check if path is a directory. If the OS/JRE supports symbolic links and
-	 * path is a symbolic link to a directory, this method returns false.
+	 * @deprecated use {@link #isDirectory(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -817,8 +1002,20 @@ public abstract class FS {
 	}
 
 	/**
-	 * Examine if path represents a regular file. If the OS/JRE supports
-	 * symbolic links the test returns false if path represents a symbolic link.
+	 * Check if path is a directory. If the OS/JRE supports symbolic links and
+	 * path is a symbolic link to a directory, this method returns false.
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return true if file is a directory,
+	 * @since 3.0
+	 */
+	public boolean isDirectory(Path path) {
+		return FileUtils.isDirectory(path);
+	}
+
+	/**
+	 * @deprecated use {@link #isFile(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -830,8 +1027,20 @@ public abstract class FS {
 	}
 
 	/**
-	 * Whether path is hidden, either starts with . on unix or has the hidden
-	 * attribute in windows
+	 * Examine if path represents a regular file. If the OS/JRE supports
+	 * symbolic links the test returns false if path represents a symbolic link.
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return true if path represents a regular file
+	 * @since 3.0
+	 */
+	public boolean isFile(Path path) {
+		return FileUtils.isFile(path);
+	}
+        
+	/**
+	 * @deprecated use {@link #isHidden(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -842,6 +1051,35 @@ public abstract class FS {
 	 */
 	public boolean isHidden(File path) throws IOException {
 		return FileUtils.isHidden(path);
+	}
+        
+	/**
+	 * Whether path is hidden, either starts with . on unix or has the hidden
+	 * attribute in windows
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return true if path is hidden, either starts with . on unix or has the
+	 *         hidden attribute in windows
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public boolean isHidden(Path path) throws IOException {
+		return FileUtils.isHidden(path);
+	}
+
+	/**
+	 * @deprecated use {@link #setHidden(Path, boolean)}
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @param hidden
+	 *            whether to set the file hidden
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public void setHidden(File path, boolean hidden) throws IOException {
+		setHidden(path.toPath(), hidden);
 	}
 
 	/**
@@ -854,8 +1092,22 @@ public abstract class FS {
 	 * @throws java.io.IOException
 	 * @since 3.0
 	 */
-	public void setHidden(File path, boolean hidden) throws IOException {
+	public void setHidden(Path path, boolean hidden) throws IOException {
 		FileUtils.setHidden(path, hidden);
+	}
+
+	/**
+	 * @deprecated use {@link #createSymLink(Path, String)}
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @param target
+	 *            target path of the symlink
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public void createSymLink(File path, String target) throws IOException {
+		FileUtils.createSymLink(path, target);
 	}
 
 	/**
@@ -868,7 +1120,7 @@ public abstract class FS {
 	 * @throws java.io.IOException
 	 * @since 3.0
 	 */
-	public void createSymLink(File path, String target) throws IOException {
+	public void createSymLink(Path path, String target) throws IOException {
 		FileUtils.createSymLink(path, target);
 	}
 
@@ -892,7 +1144,7 @@ public abstract class FS {
 
 	/**
 	 * A token representing a file created by
-	 * {@link #createNewFileAtomic(File)}. The token must be retained until the
+	 * {@link #createNewFileAtomic(Path)}. The token must be retained until the
 	 * file has been deleted in order to guarantee that the unique file was
 	 * created atomically. As soon as the file is no longer needed the lock
 	 * token must be closed.
@@ -943,6 +1195,20 @@ public abstract class FS {
 	}
 
 	/**
+	 * @deprecated use {@link #createNewFileAtomic(Path)}
+	 *
+	 * @param path
+	 *            the file to be created
+	 * @return LockToken this token must be closed after the created file was
+	 *         deleted
+	 * @throws IOException
+	 * @since 4.7
+	 */
+	public LockToken createNewFileAtomic(File path) throws IOException {
+                return createNewFileAtomic(path.toPath());
+	}
+
+	/**
 	 * Create a new file. See {@link java.io.File#createNewFile()}. Subclasses
 	 * of this class may take care to provide a safe implementation for this
 	 * even if {@link #supportsAtomicCreateNewFile()} is <code>false</code>
@@ -954,10 +1220,16 @@ public abstract class FS {
 	 * @throws IOException
 	 * @since 4.7
 	 */
-	public LockToken createNewFileAtomic(File path) throws IOException {
-		return new LockToken(path.createNewFile(), Optional.empty());
+	public LockToken createNewFileAtomic(Path path) throws IOException {
+            try {
+                Files.createFile(path);
+            } catch (FileAlreadyExistsException ex) {
+                return new LockToken(false, Optional.empty());
+            }
+            
+            return new LockToken(true, Optional.empty());
 	}
-
+        
 	/**
 	 * See
 	 * {@link org.eclipse.jgit.util.FileUtils#relativizePath(String, String, String, boolean)}.
@@ -973,11 +1245,12 @@ public abstract class FS {
 	 * @since 3.7
 	 */
 	public String relativize(String base, String other) {
-		return FileUtils.relativizePath(base, other, File.separator, this.isCaseSensitive());
+                // TODO: get file system from 'base' ???
+		return FileUtils.relativizePath(base, other, FileSystems.getDefault().getSeparator(), this.isCaseSensitive());
 	}
 
 	/**
-	 * Enumerates children of a directory.
+	 * @deprecated use {@link #list(Path, FileModeStrategy)}
 	 *
 	 * @param directory
 	 *            to get the children of
@@ -997,6 +1270,31 @@ public abstract class FS {
 			result[i] = new FileEntry(all[i], this, fileModeStrategy);
 		}
 		return result;
+	}
+        
+	/**
+	 * Enumerates children of a directory.
+	 *
+	 * @param directory
+	 *            to get the children of
+	 * @param fileModeStrategy
+	 *            to use to calculate the git mode of a child
+	 * @return an array of entries for the children
+	 *
+	 * @since 5.0
+	 */
+	public Entry[] list(Path directory, FileModeStrategy fileModeStrategy) {
+                
+                try {
+                    final Path[] files = Files.list(directory).toArray(Path[]::new);
+                    final Entry[] result = new Entry[files.length];
+                    for (int i = 0; i < result.length; i++) {
+                            result[i] = new FileEntry(files[i], this, fileModeStrategy);
+                    }
+                    return result;
+                } catch (IOException ex) {}
+                
+                return NO_ENTRIES;
 	}
 
 	/**
@@ -1096,26 +1394,29 @@ public abstract class FS {
 			final String hookName, String[] args, PrintStream outRedirect,
 			PrintStream errRedirect, String stdinArgs)
 			throws JGitInternalException {
-		final File hookFile = findHook(repository, hookName);
+		final Path hookFile = findHookPath(repository, hookName);
 		if (hookFile == null)
 			return new ProcessResult(Status.NOT_PRESENT);
 
-		final String hookPath = hookFile.getAbsolutePath();
-		final File runDirectory;
+		final String hookPath = hookFile.toAbsolutePath().toString();
+		final Path runDirectory;
 		if (repository.isBare())
-			runDirectory = repository.getDirectory();
+			runDirectory = repository.getDirectoryPath();
 		else
-			runDirectory = repository.getWorkTree();
-		final String cmd = relativize(runDirectory.getAbsolutePath(),
+			runDirectory = repository.getWorkTreePath();
+		final String cmd = relativize(runDirectory.toAbsolutePath().toString(),
 				hookPath);
 		ProcessBuilder hookProcess = runInShell(cmd, args);
-		hookProcess.directory(runDirectory);
+		
+                hookProcess.directory(runDirectory.toFile());
+                
+                
 		Map<String, String> environment = hookProcess.environment();
 		environment.put(Constants.GIT_DIR_KEY,
-				repository.getDirectory().getAbsolutePath());
+				repository.getDirectoryPath().toAbsolutePath().toString());
 		if (!repository.isBare()) {
 			environment.put(Constants.GIT_WORK_TREE_KEY,
-					repository.getWorkTree().getAbsolutePath());
+					repository.getWorkTreePath().toAbsolutePath().toString());
 		}
 		try {
 			return new ProcessResult(runProcess(hookProcess, outRedirect,
@@ -1133,7 +1434,7 @@ public abstract class FS {
 
 
 	/**
-	 * Tries to find a hook matching the given one in the given repository.
+	 * @deprecated use {@link #findHookPath(Repository, String)}
 	 *
 	 * @param repository
 	 *            The repository within which to find a hook.
@@ -1144,12 +1445,28 @@ public abstract class FS {
 	 * @since 4.0
 	 */
 	public File findHook(Repository repository, String hookName) {
-		File gitDir = repository.getDirectory();
-		if (gitDir == null)
+            return findHookPath(repository, hookName).toFile();
+	}
+
+	/**
+	 * Tries to find a hook matching the given one in the given repository.
+	 *
+	 * @param repository
+	 *            The repository within which to find a hook.
+	 * @param hookName
+	 *            The name of the hook we're trying to find.
+	 * @return The {@link java.io.File} containing this particular hook if it
+	 *         exists in the given repository, <code>null</code> otherwise.
+	 * @since 4.0
+	 */
+	public Path findHookPath(Repository repository, String hookName) {
+		Path gitDir = repository.getDirectoryPath();
+		if (gitDir == null) {
 			return null;
-		final File hookFile = new File(new File(gitDir,
-				Constants.HOOKS), hookName);
-		return hookFile.isFile() ? hookFile : null;
+                }
+                final Path hookFile = gitDir.resolve(Constants.HOOKS).resolve(hookName);
+
+		return Files.isRegularFile(hookFile) ? hookFile : null;
 	}
 
 	/**
@@ -1351,7 +1668,7 @@ public abstract class FS {
 	 */
 	public ExecutionResult execute(ProcessBuilder pb, InputStream in)
 			throws IOException, InterruptedException {
-		try (TemporaryBuffer stdout = new TemporaryBuffer.LocalFile(null);
+		try (TemporaryBuffer stdout = new TemporaryBuffer.LocalFile((Path)null);
 				TemporaryBuffer stderr = new TemporaryBuffer.Heap(1024,
 						1024 * 1024)) {
 			int rc = runProcess(pb, stdout, stderr, in);
@@ -1429,7 +1746,7 @@ public abstract class FS {
 
 		private final boolean isExecutable;
 
-		private final File file;
+		private final Path file;
 
 		private final boolean exists;
 
@@ -1439,8 +1756,8 @@ public abstract class FS {
 		protected long length = -1;
 
 		final FS fs;
-
-		Attributes(FS fs, File file, boolean exists, boolean isDirectory,
+                
+		Attributes(FS fs, Path file, boolean exists, boolean isDirectory,
 				boolean isExecutable, boolean isSymbolicLink,
 				boolean isRegularFile, long creationTime,
 				long lastModifiedTime, long length) {
@@ -1457,22 +1774,34 @@ public abstract class FS {
 		}
 
 		/**
+		 * @deprecated use {@link #Attributes(Path, FS)}
+		 *
+		 * @param fs
+		 * @param path
+		 */
+		public Attributes(File path, FS fs) {
+			this(fs, path.toPath(), false, false, false, false, false, 0L, 0L, 0L);
+		}
+
+		/**
 		 * Constructor when there are issues with reading. All attributes except
 		 * given will be set to the default values.
 		 *
 		 * @param fs
 		 * @param path
 		 */
-		public Attributes(File path, FS fs) {
+		public Attributes(Path path, FS fs) {
 			this(fs, path, false, false, false, false, false, 0L, 0L, 0L);
 		}
-
 		/**
 		 * @return length of this file object
 		 */
 		public long getLength() {
-			if (length == -1)
-				return length = file.length();
+			if (length == -1) {
+                                try {
+                                        return Files.size(file);
+                                } catch (IOException ex) {}
+                        }
 			return length;
 		}
 
@@ -1480,13 +1809,22 @@ public abstract class FS {
 		 * @return the filename
 		 */
 		public String getName() {
-			return file.getName();
+			return file.getFileName().toString();
+		}
+
+		/**
+                 * @deprecated use {@link #getFilePath()}
+                 * 
+		 * @return the file the attributes apply to
+		 */
+		public File getFile() {
+			return file.toFile();
 		}
 
 		/**
 		 * @return the file the attributes apply to
 		 */
-		public File getFile() {
+		public Path getFilePath() {
 			return file;
 		}
 
@@ -1496,7 +1834,7 @@ public abstract class FS {
 	}
 
 	/**
-	 * Get the file attributes we care for.
+	 * @deprecated use {@link #getAttributes(Path)}
 	 *
 	 * @param path
 	 *            a {@link java.io.File} object.
@@ -1504,16 +1842,47 @@ public abstract class FS {
 	 * @since 3.3
 	 */
 	public Attributes getAttributes(File path) {
-		boolean isDirectory = isDirectory(path);
-		boolean isFile = !isDirectory && path.isFile();
-		assert path.exists() == isDirectory || isFile;
+               return getAttributes(path.toPath());
+	}
+        
+	/**
+	 * Get the file attributes we care for.
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return the file attributes we care for.
+	 * @since 3.3
+	 */
+	public Attributes getAttributes(Path path) {
+		boolean isDirectory = Files.isDirectory(path);
+		boolean isFile = !isDirectory && Files.isRegularFile(path);
+		assert Files.exists(path) == isDirectory || isFile;
 		boolean exists = isDirectory || isFile;
 		boolean canExecute = exists && !isDirectory && canExecute(path);
 		boolean isSymlink = false;
-		long lastModified = exists ? path.lastModified() : 0L;
+                
+                long lastModified;
+                try {
+                    lastModified = FileUtils.lastModified(path);
+                } catch(IOException ex) {
+                    lastModified = 0L;
+                }
+
 		long createTime = 0L;
 		return new Attributes(this, path, exists, isDirectory, canExecute,
 				isSymlink, isFile, createTime, lastModified, -1);
+	}
+
+	/**
+	 * @deprecated use {@link #normalizePath(Path)}
+	 *
+	 * @param file
+	 *            a {@link java.io.File} object.
+	 * @return NFC-format File
+	 * @since 3.3
+	 */
+	public File normalize(File file) {
+		return file;
 	}
 
 	/**
@@ -1522,9 +1891,8 @@ public abstract class FS {
 	 * @param file
 	 *            a {@link java.io.File} object.
 	 * @return NFC-format File
-	 * @since 3.3
 	 */
-	public File normalize(File file) {
+	public Path normalizePath(Path file) {
 		return file;
 	}
 

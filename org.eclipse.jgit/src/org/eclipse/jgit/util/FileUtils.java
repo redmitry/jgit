@@ -51,23 +51,31 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.CopyOption;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.DosFileAttributeView;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.UserPrincipal;
 import java.text.MessageFormat;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.eclipse.jgit.internal.JGitText;
@@ -144,6 +152,21 @@ public class FileUtils {
 	 *             multiple concurrent threads all try to delete the same file.
 	 */
 	public static void delete(File f) throws IOException {
+		delete(f.toPath());
+	}
+
+	/**
+	 * Delete file or empty folder
+	 *
+	 * @param f
+	 *            {@code File} to be deleted
+	 * @throws java.io.IOException
+	 *             if deletion of {@code f} fails. This may occur if {@code f}
+	 *             didn't exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to delete the same file.
+	 */
+	public static void delete(Path f) throws IOException {
 		delete(f, NONE);
 	}
 
@@ -165,59 +188,87 @@ public class FileUtils {
 	 *             This exception is not thrown when IGNORE_ERRORS is set.
 	 */
 	public static void delete(File f, int options) throws IOException {
+                delete(toPath(f), options);
+	}
+
+	/**
+	 * Delete file or folder
+	 *
+	 * @param f
+	 *            {@code File} to be deleted
+	 * @param options
+	 *            deletion options, {@code RECURSIVE} for recursive deletion of
+	 *            a subtree, {@code RETRY} to retry when deletion failed.
+	 *            Retrying may help if the underlying file system doesn't allow
+	 *            deletion of files being read by another thread.
+	 * @throws java.io.IOException
+	 *             if deletion of {@code f} fails. This may occur if {@code f}
+	 *             didn't exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to delete the same file.
+	 *             This exception is not thrown when IGNORE_ERRORS is set.
+	 */
+	public static void delete(Path f, int options) throws IOException {
 		FS fs = FS.DETECTED;
 		if ((options & SKIP_MISSING) != 0 && !fs.exists(f))
 			return;
 
 		if ((options & RECURSIVE) != 0 && fs.isDirectory(f)) {
-			final File[] items = f.listFiles();
-			if (items != null) {
-				List<File> files = new ArrayList<>();
-				List<File> dirs = new ArrayList<>();
-				for (File c : items)
-					if (c.isFile())
-						files.add(c);
-					else
-						dirs.add(c);
-				// Try to delete files first, otherwise options
-				// EMPTY_DIRECTORIES_ONLY|RECURSIVE will delete empty
-				// directories before aborting, depending on order.
-				for (File file : files)
-					delete(file, options);
-				for (File d : dirs)
-					delete(d, options);
-			}
+			final Path[] items = Files.list(f).toArray(Path[]::new);
+
+                        List<Path> files = new ArrayList<>();
+                        List<Path> dirs = new ArrayList<>();
+                        for (Path c : items) {
+                                if (Files.isDirectory(c)) {
+                                        dirs.add(c);
+                                } else {
+                                        files.add(c);
+                                }
+                        }
+                        // Try to delete files first, otherwise options
+                        // EMPTY_DIRECTORIES_ONLY|RECURSIVE will delete empty
+                        // directories before aborting, depending on order.
+                        for (Path file : files) {
+                                delete(file, options);
+                        }
+                        for (Path d : dirs) {
+                                delete(d, options);
+                        }
 		}
 
 		boolean delete = false;
 		if ((options & EMPTY_DIRECTORIES_ONLY) != 0) {
-			if (f.isDirectory()) {
+			if (Files.isDirectory(f)) {
 				delete = true;
 			} else {
 				if ((options & IGNORE_ERRORS) == 0)
 					throw new IOException(MessageFormat.format(
 							JGitText.get().deleteFileFailed,
-							f.getAbsolutePath()));
+							f.toAbsolutePath()));
 			}
 		} else {
 			delete = true;
 		}
 
-		if (delete && !f.delete()) {
-			if ((options & RETRY) != 0 && fs.exists(f)) {
-				for (int i = 1; i < 10; i++) {
-					try {
-						Thread.sleep(100);
-					} catch (InterruptedException e) {
-						// ignore
-					}
-					if (f.delete())
-						return;
-				}
-			}
+		if (delete) {
+                        int attempts = (options & RETRY) != 0 ? 10 : 1;
+                        do {
+                            try {
+                                    Files.delete(f);
+                                    return;
+                            } catch (IOException ex) {
+                            }
+
+                            try {
+                                    Thread.sleep(100);
+                            } catch (InterruptedException e) {
+                                    // ignore
+                            }
+                        } while (--attempts > 0);
+
 			if ((options & IGNORE_ERRORS) == 0)
 				throw new IOException(MessageFormat.format(
-						JGitText.get().deleteFileFailed, f.getAbsolutePath()));
+						JGitText.get().deleteFileFailed, f.toAbsolutePath()));
 		}
 	}
 
@@ -244,6 +295,33 @@ public class FileUtils {
 	 * @since 3.0
 	 */
 	public static void rename(File src, File dst)
+			throws IOException {
+		rename(toPath(src), toPath(dst));
+	}
+
+	/**
+	 * Rename a file or folder. If the rename fails and if we are running on a
+	 * filesystem where it makes sense to repeat a failing rename then repeat
+	 * the rename operation up to 9 times with 100ms sleep time between two
+	 * calls. Furthermore if the destination exists and is directory hierarchy
+	 * with only directories in it, the whole directory hierarchy will be
+	 * deleted. If the target represents a non-empty directory structure, empty
+	 * subdirectories within that structure may or may not be deleted even if
+	 * the method fails. Furthermore if the destination exists and is a file
+	 * then the file will be deleted and then the rename is retried.
+	 * <p>
+	 * This operation is <em>not</em> atomic.
+	 *
+	 * @see FS#retryFailedLockFileCommit()
+	 * @param src
+	 *            the old {@code File}
+	 * @param dst
+	 *            the new {@code File}
+	 * @throws java.io.IOException
+	 *             if the rename has failed
+	 * @since 3.0
+	 */
+	public static void rename(Path src, Path dst)
 			throws IOException {
 		rename(src, dst, StandardCopyOption.REPLACE_EXISTING);
 	}
@@ -279,20 +357,55 @@ public class FileUtils {
 	public static void rename(final File src, final File dst,
 			CopyOption... options)
 					throws AtomicMoveNotSupportedException, IOException {
+	}
+
+	/**
+	 * Rename a file or folder using the passed
+	 * {@link java.nio.file.CopyOption}s. If the rename fails and if we are
+	 * running on a filesystem where it makes sense to repeat a failing rename
+	 * then repeat the rename operation up to 9 times with 100ms sleep time
+	 * between two calls. Furthermore if the destination exists and is a
+	 * directory hierarchy with only directories in it, the whole directory
+	 * hierarchy will be deleted. If the target represents a non-empty directory
+	 * structure, empty subdirectories within that structure may or may not be
+	 * deleted even if the method fails. Furthermore if the destination exists
+	 * and is a file then the file will be replaced if
+	 * {@link java.nio.file.StandardCopyOption#REPLACE_EXISTING} has been set.
+	 * If {@link java.nio.file.StandardCopyOption#ATOMIC_MOVE} has been set the
+	 * rename will be done atomically or fail with an
+	 * {@link java.nio.file.AtomicMoveNotSupportedException}
+	 *
+	 * @param src
+	 *            the old file
+	 * @param dst
+	 *            the new file
+	 * @param options
+	 *            options to pass to
+	 *            {@link java.nio.file.Files#move(java.nio.file.Path, java.nio.file.Path, CopyOption...)}
+	 * @throws java.nio.file.AtomicMoveNotSupportedException
+	 *             if file cannot be moved as an atomic file system operation
+	 * @throws java.io.IOException
+	 * @since 4.1
+	 */
+	public static void rename(final Path src, final Path dst,
+			CopyOption... options)
+					throws AtomicMoveNotSupportedException, IOException {
 		int attempts = FS.DETECTED.retryFailedLockFileCommit() ? 10 : 1;
 		while (--attempts >= 0) {
 			try {
-				Files.move(toPath(src), toPath(dst), options);
+				Files.move(src, dst, options);
 				return;
 			} catch (AtomicMoveNotSupportedException e) {
 				throw e;
 			} catch (IOException e) {
 				try {
-					if (!dst.delete()) {
-						delete(dst, EMPTY_DIRECTORIES_ONLY | RECURSIVE);
-					}
+                                        try {
+                                                Files.delete(dst);
+                                        } catch(IOException ex) {
+                                                delete(dst, EMPTY_DIRECTORIES_ONLY | RECURSIVE);
+                                        }
 					// On *nix there is no try, you do or do not
-					Files.move(toPath(src), toPath(dst), options);
+					Files.move(src, dst, options);
 					return;
 				} catch (IOException e2) {
 					// ignore and continue retry
@@ -303,12 +416,12 @@ public class FileUtils {
 			} catch (InterruptedException e) {
 				throw new IOException(
 						MessageFormat.format(JGitText.get().renameFileFailed,
-								src.getAbsolutePath(), dst.getAbsolutePath()));
+								src.toAbsolutePath(), dst.toAbsolutePath()));
 			}
 		}
 		throw new IOException(
 				MessageFormat.format(JGitText.get().renameFileFailed,
-						src.getAbsolutePath(), dst.getAbsolutePath()));
+						src.toAbsolutePath(), dst.toAbsolutePath()));
 	}
 
 	/**
@@ -345,12 +458,34 @@ public class FileUtils {
 	 */
 	public static void mkdir(File d, boolean skipExisting)
 			throws IOException {
-		if (!d.mkdir()) {
-			if (skipExisting && d.isDirectory())
-				return;
+                mkdir(toPath(d), skipExisting);
+	}
+
+	/**
+	 * Creates the directory named by this abstract pathname.
+	 *
+	 * @param d
+	 *            directory to be created
+	 * @param skipExisting
+	 *            if {@code true} skip creation of the given directory if it
+	 *            already exists in the file system
+	 * @throws java.io.IOException
+	 *             if creation of {@code d} fails. This may occur if {@code d}
+	 *             did exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to create the same
+	 *             directory.
+	 */
+	public static void mkdir(Path d, boolean skipExisting)
+			throws IOException {
+                try {
+                    Files.createDirectory(d);
+                } catch (FileAlreadyExistsException ex) {
+                    if (!skipExisting || !Files.isDirectory(d)) {
 			throw new IOException(MessageFormat.format(
-					JGitText.get().mkDirFailed, d.getAbsolutePath()));
-		}
+					JGitText.get().mkDirFailed, d.toAbsolutePath()));                        
+                    }
+                }
 	}
 
 	/**
@@ -369,9 +504,28 @@ public class FileUtils {
 	 *             directory.
 	 */
 	public static void mkdirs(File d) throws IOException {
-		mkdirs(d, false);
+		mkdirs(toPath(d));
 	}
 
+	/**
+	 * Creates the directory named by this abstract pathname, including any
+	 * necessary but nonexistent parent directories. Note that if this operation
+	 * fails it may have succeeded in creating some of the necessary parent
+	 * directories.
+	 *
+	 * @param d
+	 *            directory to be created
+	 * @throws java.io.IOException
+	 *             if creation of {@code d} fails. This may occur if {@code d}
+	 *             did exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to create the same
+	 *             directory.
+	 */
+	public static void mkdirs(Path d) throws IOException {
+		mkdirs(d, false);
+	}
+        
 	/**
 	 * Creates the directory named by this abstract pathname, including any
 	 * necessary but nonexistent parent directories. Note that if this operation
@@ -392,12 +546,57 @@ public class FileUtils {
 	 */
 	public static void mkdirs(File d, boolean skipExisting)
 			throws IOException {
-		if (!d.mkdirs()) {
-			if (skipExisting && d.isDirectory())
-				return;
+                mkdirs(toPath(d), skipExisting);
+	}
+
+	/**
+	 * Creates the directory named by this abstract pathname, including any
+	 * necessary but nonexistent parent directories. Note that if this operation
+	 * fails it may have succeeded in creating some of the necessary parent
+	 * directories.
+	 *
+	 * @param d
+	 *            directory to be created
+	 * @param skipExisting
+	 *            if {@code true} skip creation of the given directory if it
+	 *            already exists in the file system
+	 * @throws java.io.IOException
+	 *             if creation of {@code d} fails. This may occur if {@code d}
+	 *             did exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to create the same
+	 *             directory.
+	 */
+	public static void mkdirs(Path d, boolean skipExisting)
+			throws IOException {
+                try {
+                    Files.createDirectories(d);
+                } catch (FileAlreadyExistsException ex) {
+                    if (!skipExisting || !Files.isDirectory(d)) {
 			throw new IOException(MessageFormat.format(
-					JGitText.get().mkDirsFailed, d.getAbsolutePath()));
-		}
+					JGitText.get().mkDirFailed, d.toAbsolutePath()));                        
+                    }
+                }
+	}
+        
+	/**
+	 * Atomically creates a new, empty file named by this abstract pathname if
+	 * and only if a file with this name does not yet exist. The check for the
+	 * existence of the file and the creation of the file if it does not exist
+	 * are a single operation that is atomic with respect to all other
+	 * filesystem activities that might affect the file.
+	 * <p>
+	 * Note: this method should not be used for file-locking, as the resulting
+	 * protocol cannot be made to work reliably. The
+	 * {@link java.nio.channels.FileLock} facility should be used instead.
+	 *
+	 * @param f
+	 *            the file to be created
+	 * @throws java.io.IOException
+	 *             if the named file already exists or if an I/O error occurred
+	 */
+	public static void createNewFile(File f) throws IOException {
+                createNewFile(toPath(f));
 	}
 
 	/**
@@ -416,10 +615,13 @@ public class FileUtils {
 	 * @throws java.io.IOException
 	 *             if the named file already exists or if an I/O error occurred
 	 */
-	public static void createNewFile(File f) throws IOException {
-		if (!f.createNewFile())
+	public static void createNewFile(Path f) throws IOException {
+            try {
+                Files.createFile(f);
+            } catch(IOException ex) {
 			throw new IOException(MessageFormat.format(
 					JGitText.get().createNewFileFailed, f));
+            }
 	}
 
 	/**
@@ -435,9 +637,24 @@ public class FileUtils {
 	 */
 	public static Path createSymLink(File path, String target)
 			throws IOException {
-		Path nioPath = toPath(path);
-		if (Files.exists(nioPath, LinkOption.NOFOLLOW_LINKS)) {
-			BasicFileAttributes attrs = Files.readAttributes(nioPath,
+                return createSymLink(toPath(path), target);
+	}
+
+	/**
+	 * Create a symbolic link
+	 *
+	 * @param path
+	 *            the path of the symbolic link to create
+	 * @param target
+	 *            the target of the symbolic link
+	 * @return the path to the symbolic link
+	 * @throws java.io.IOException
+	 * @since 4.2
+	 */
+	public static Path createSymLink(Path path, String target)
+			throws IOException {
+		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+			BasicFileAttributes attrs = Files.readAttributes(path,
 					BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 			if (attrs.isRegularFile() || attrs.isSymbolicLink()) {
 				delete(path);
@@ -449,7 +666,20 @@ public class FileUtils {
 			target = target.replace('/', '\\');
 		}
 		Path nioTarget = toPath(new File(target));
-		return Files.createSymbolicLink(nioPath, nioTarget);
+		return Files.createSymbolicLink(path, nioTarget);
+	}
+
+	/**
+	 * @deprecated use {@link #readSymLink(Path)}
+	 *
+	 * @param path
+	 *            a {@link java.io.File} object.
+	 * @return target path of the symlink, or null if it is not a symbolic link
+	 * @throws java.io.IOException
+	 * @since 3.0
+	 */
+	public static String readSymLink(File path) throws IOException {
+                return readSymLink(path.toPath());
 	}
 
 	/**
@@ -461,9 +691,8 @@ public class FileUtils {
 	 * @throws java.io.IOException
 	 * @since 3.0
 	 */
-	public static String readSymLink(File path) throws IOException {
-		Path nioPath = toPath(path);
-		Path target = Files.readSymbolicLink(nioPath);
+	public static String readSymLink(Path path) throws IOException {
+		Path target = Files.readSymbolicLink(path);
 		String targetString = target.toString();
 		if (SystemReader.getInstance().isWindows()) {
 			targetString = targetString.replace('\\', '/');
@@ -495,6 +724,35 @@ public class FileUtils {
 				continue;
 			if (!tmp.mkdir())
 				continue;
+			return tmp;
+		}
+		throw new IOException(JGitText.get().cannotCreateTempDir);
+	}
+
+	/**
+	 * Create a temporary directory.
+	 *
+	 * @param prefix
+	 *            prefix string
+	 * @param suffix
+	 *            suffix string
+	 * @param dir
+	 *            The parent dir, can be null to use system default temp dir.
+	 * @return the temp dir created.
+	 * @throws java.io.IOException
+	 * @since 3.4
+	 */
+	public static Path createTempDir(String prefix, String suffix, Path dir)
+			throws IOException {
+		final int RETRIES = 1; // When something bad happens, retry once.
+		for (int i = 0; i < RETRIES; i++) {
+                        Path tmp = Files.createTempFile(dir, prefix, suffix);
+                        try {
+                            Files.deleteIfExists(tmp);
+                            Files.createDirectory(tmp);
+                        } catch(IOException | SecurityException ex) {
+                            continue;
+                        }
 			return tmp;
 		}
 		throw new IOException(JGitText.get().cannotCreateTempDir);
@@ -645,7 +903,15 @@ public class FileUtils {
 	 * @return {@code true} if the passed file is a symbolic link
 	 */
 	static boolean isSymlink(File file) {
-		return Files.isSymbolicLink(file.toPath());
+		return isSymlink(file.toPath());
+	}
+
+	/**
+	 * @param file
+	 * @return {@code true} if the passed file is a symbolic link
+	 */
+	static boolean isSymlink(Path file) {
+		return Files.isSymbolicLink(file);
 	}
 
 	/**
@@ -654,8 +920,19 @@ public class FileUtils {
 	 *         links
 	 * @throws IOException
 	 */
-	static long lastModified(File file) throws IOException {
+	public static long lastModified(File file) throws IOException {
 		return Files.getLastModifiedTime(toPath(file), LinkOption.NOFOLLOW_LINKS)
+				.toMillis();
+	}
+        
+	/**
+	 * @param file
+	 * @return lastModified attribute for given file, not following symbolic
+	 *         links
+	 * @throws IOException
+	 */
+	public static long lastModified(Path file) throws IOException {
+		return Files.getLastModifiedTime(file, LinkOption.NOFOLLOW_LINKS)
 				.toMillis();
 	}
 
@@ -670,6 +947,16 @@ public class FileUtils {
 
 	/**
 	 * @param file
+	 * @param time
+	 * @throws IOException
+	 */
+	static void setLastModified(Path file, long time) throws IOException {
+		Files.setLastModifiedTime(file, FileTime.fromMillis(time));
+	}
+
+        
+	/**
+	 * @param file
 	 * @return {@code true} if the given file exists, not following symbolic
 	 *         links
 	 */
@@ -678,12 +965,23 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #isHidden(Path)}
+         * 
 	 * @param file
 	 * @return {@code true} if the given file is hidden
 	 * @throws IOException
 	 */
 	static boolean isHidden(File file) throws IOException {
 		return Files.isHidden(toPath(file));
+	}
+        
+	/**
+	 * @param file
+	 * @return {@code true} if the given file is hidden
+	 * @throws IOException
+	 */
+	static boolean isHidden(Path file) throws IOException {
+		return Files.isHidden(file);
 	}
 
 	/**
@@ -697,10 +995,152 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static void setHidden(File file, boolean hidden) throws IOException {
-		Files.setAttribute(toPath(file), "dos:hidden", Boolean.valueOf(hidden), //$NON-NLS-1$
-				LinkOption.NOFOLLOW_LINKS);
+                FileUtils.setHidden(FileUtils.toPath(file), hidden);
 	}
 
+	/**
+	 * Set a file hidden (on Windows)
+	 *
+	 * @param file
+	 *            a {@link java.io.File} object.
+	 * @param hidden
+	 *            a boolean.
+	 * @throws java.io.IOException
+	 * @since 4.1
+	 */
+	public static void setHidden(Path file, boolean hidden) throws IOException {
+                if (Files.isHidden(file) != hidden) {
+                        DosFileAttributeView dos = Files.getFileAttributeView(file, 
+                                DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                        if (dos != null) {
+                            dos.setHidden(hidden); //$NON-NLS-1$
+                        }
+                }
+	}
+
+	/**
+	 * Set 'executable' attribute
+	 *
+	 * @param file
+	 *            a {@link java.nio.file.Path} object.
+	 * @param executable
+	 *            a boolean.
+	 * @throws java.io.IOException
+	 * 
+	 */
+        public static void setExecutable(Path file, boolean executable) throws IOException {        
+                if (Files.isExecutable(file) != executable) {
+                        PosixFileAttributeView posix = Files.getFileAttributeView(file, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                        if (posix != null) {
+                                PosixFileAttributes attr = posix.readAttributes();
+                                Set<PosixFilePermission> permissions = attr.permissions();
+                                if (executable) {
+                                        permissions.add(PosixFilePermission.OWNER_EXECUTE);
+                                } else {
+                                        permissions.remove(PosixFilePermission.OWNER_EXECUTE);
+                                        permissions.remove(PosixFilePermission.GROUP_EXECUTE);
+                                        permissions.remove(PosixFilePermission.OTHERS_EXECUTE);
+                                }
+                                posix.setPermissions(permissions);
+                        } else {
+                                AclFileAttributeView acl = Files.getFileAttributeView(file, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                                if (acl != null) {
+                                        final UserPrincipal user = Files.getOwner(file);
+                                        final List<AclEntry> list = acl.getAcl();
+                                        if (executable) {
+                                                final AclEntry entry = AclEntry.newBuilder()
+                                                                .setType(AclEntryType.ALLOW)
+                                                                .setPrincipal(user)
+                                                                .setPermissions(AclEntryPermission.EXECUTE)
+                                                                .build();
+                                                list.add(entry);
+                                        } else {
+                                            for (int i = 0; i < list.size(); i++) {
+                                                final AclEntry entry = list.get(i);
+                                                if (AclEntryType.ALLOW == entry.type() &&
+                                                        entry.permissions().contains(AclEntryPermission.EXECUTE)) {
+                                                    list.set(i, AclEntry.newBuilder(entry).setType(AclEntryType.DENY).build());
+                                                }
+                                            }
+                                        }
+                                        acl.setAcl(list);
+                                }
+                        }
+                }
+        }
+        
+	/**
+	 * Set 'readonly' attribute
+	 *
+	 * @param file
+	 *            a {@link java.nio.file.Path} object.
+	 * @param readonly
+	 *            a boolean.
+	 * @throws java.io.IOException
+	 * 
+	 */
+        public static void setReadOnly(Path file, boolean readonly) throws IOException {
+                if (Files.isWritable(file) == readonly) {
+                        PosixFileAttributeView posix = Files.getFileAttributeView(file, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                        if (posix != null) {
+                                PosixFileAttributes attr = posix.readAttributes();
+                                Set<PosixFilePermission> permissions = attr.permissions();
+                                if (readonly) {
+                                        permissions.remove(PosixFilePermission.OWNER_WRITE);
+                                        permissions.remove(PosixFilePermission.GROUP_WRITE);
+                                        permissions.remove(PosixFilePermission.OTHERS_WRITE);
+                                } else {
+                                        permissions.add(PosixFilePermission.OWNER_WRITE);
+                                }
+                                posix.setPermissions(permissions);
+
+                        } else {
+                                AclFileAttributeView acl = Files.getFileAttributeView(file, 
+                                        AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                                if (acl != null) {
+                                        final UserPrincipal user = Files.getOwner(file);
+                                        final List<AclEntry> list = acl.getAcl();
+                                        if (readonly) {
+                                                for (int i = 0; i < list.size(); i++) {
+                                                    final AclEntry entry = list.get(i);
+                                                    if (AclEntryType.ALLOW == entry.type() &&
+                                                            entry.permissions().contains(AclEntryPermission.WRITE_DATA)) {
+                                                        list.set(i, AclEntry.newBuilder(entry).setType(AclEntryType.DENY).build());
+                                                    }
+                                                }
+                                        } else {
+                                                final AclEntry entry = AclEntry.newBuilder()
+                                                                .setType(AclEntryType.ALLOW)
+                                                                .setPrincipal(user)
+                                                                .setPermissions(AclEntryPermission.WRITE_DATA)
+                                                                .build();
+                                                list.add(entry);
+                                        }
+                                        acl.setAcl(list);
+                                } else {
+                                        DosFileAttributeView dos = Files.getFileAttributeView(file, 
+                                                DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                                        if (dos != null) {
+                                            dos.setReadOnly(readonly);
+                                        }
+                                }
+                        }
+                }
+        }
+
+	/**
+	 * @deprecated use {@link #getLength(Path)}
+	 *
+	 * @param file
+	 *            a {@link java.io.File}.
+	 * @return length of the given file
+	 * @throws java.io.IOException
+	 * @since 4.1
+	 */
+	public static long getLength(File file) throws IOException {
+                return getLength(toPath(file));
+	}
+        
 	/**
 	 * Get file length
 	 *
@@ -710,12 +1150,11 @@ public class FileUtils {
 	 * @throws java.io.IOException
 	 * @since 4.1
 	 */
-	public static long getLength(File file) throws IOException {
-		Path nioPath = toPath(file);
-		if (Files.isSymbolicLink(nioPath))
-			return Files.readSymbolicLink(nioPath).toString()
+	public static long getLength(Path file) throws IOException {
+		if (Files.isSymbolicLink(file))
+			return Files.readSymbolicLink(file).toString()
 					.getBytes(UTF_8).length;
-		return Files.size(nioPath);
+		return Files.size(file);
 	}
 
 	/**
@@ -724,7 +1163,16 @@ public class FileUtils {
 	 *         symbolic links
 	 */
 	static boolean isDirectory(File file) {
-		return Files.isDirectory(file.toPath(), LinkOption.NOFOLLOW_LINKS);
+		return isDirectory(file.toPath());
+	}
+
+	/**
+	 * @param file
+	 * @return {@code true} if the given file is a directory, not following
+	 *         symbolic links
+	 */
+	static boolean isDirectory(Path file) {
+		return Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS);
 	}
 
 	/**
@@ -733,7 +1181,16 @@ public class FileUtils {
 	 *         links
 	 */
 	static boolean isFile(File file) {
-		return Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS);
+		return isFile(file.toPath());
+	}
+
+	/**
+	 * @param file
+	 * @return {@code true} if the given file is a file, not following symbolic
+	 *         links
+	 */
+	static boolean isFile(Path file) {
+		return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
 	}
 
 	/**
@@ -745,10 +1202,22 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static boolean canExecute(File file) {
-		if (!isFile(file)) {
+            return FileUtils.canExecute(file.toPath());
+	}
+
+	/**
+	 * Whether the given file can be executed.
+	 *
+	 * @param file
+	 *            a {@link java.io.File} object.
+	 * @return {@code true} if the given file can be executed.
+	 * @since 4.1
+	 */
+	public static boolean canExecute(Path file) {
+		if (!Files.isRegularFile(file)) {
 			return false;
 		}
-		return Files.isExecutable(file.toPath());
+		return Files.isExecutable(file);
 	}
 
 	/**
@@ -756,19 +1225,18 @@ public class FileUtils {
 	 * @param file
 	 * @return non null attributes object
 	 */
-	static Attributes getFileAttributesBasic(FS fs, File file) {
+	static Attributes getFileAttributesBasic(FS fs, Path file) {
 		try {
-			Path nioPath = toPath(file);
-			BasicFileAttributes readAttributes = nioPath
+			BasicFileAttributes readAttributes = file
 					.getFileSystem()
 					.provider()
-					.getFileAttributeView(nioPath,
+					.getFileAttributeView(file,
 							BasicFileAttributeView.class,
 							LinkOption.NOFOLLOW_LINKS).readAttributes();
 			Attributes attributes = new Attributes(fs, file,
 					true,
 					readAttributes.isDirectory(),
-					fs.supportsExecute() ? file.canExecute() : false,
+					fs.supportsExecute() ? Files.isExecutable(file) : false,
 					readAttributes.isSymbolicLink(),
 					readAttributes.isRegularFile(), //
 					readAttributes.creationTime().toMillis(), //
@@ -793,12 +1261,25 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static Attributes getFileAttributesPosix(FS fs, File file) {
+                return getFileAttributesPosix(fs, file.toPath());
+	}
+
+	/**
+	 * Get file system attributes for the given file.
+	 *
+	 * @param fs
+	 *            a {@link org.eclipse.jgit.util.FS} object.
+	 * @param file
+	 *            a {@link java.io.File}.
+	 * @return file system attributes for the given file.
+	 * @since 4.1
+	 */
+	public static Attributes getFileAttributesPosix(FS fs, Path file) {
 		try {
-			Path nioPath = toPath(file);
-			PosixFileAttributes readAttributes = nioPath
+			PosixFileAttributes readAttributes = file
 					.getFileSystem()
 					.provider()
-					.getFileAttributeView(nioPath,
+					.getFileAttributeView(file,
 							PosixFileAttributeView.class,
 							LinkOption.NOFOLLOW_LINKS).readAttributes();
 			Attributes attributes = new Attributes(

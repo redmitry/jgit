@@ -45,15 +45,16 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
+import java.io.BufferedOutputStream;
 import java.io.EOFException;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.channels.Channels;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
@@ -110,7 +111,7 @@ class ObjectDirectoryInserter extends ObjectInserter {
 		if (!createDuplicate && db.has(id)) {
 			return id;
 		} else {
-			File tmp = toTemp(type, data, off, len);
+			Path tmp = toTemp(type, data, off, len);
 			return insertOneObject(tmp, id, createDuplicate);
 		}
 	}
@@ -143,14 +144,14 @@ class ObjectDirectoryInserter extends ObjectInserter {
 
 		} else {
 			SHA1 md = digest();
-			File tmp = toTemp(md, type, len, is);
+			Path tmp = toTemp(md, type, len, is);
 			ObjectId id = md.toObjectId();
 			return insertOneObject(tmp, id, createDuplicate);
 		}
 	}
 
 	private ObjectId insertOneObject(
-			File tmp, ObjectId id, boolean createDuplicate)
+			Path tmp, ObjectId id, boolean createDuplicate)
 			throws IOException, ObjectWritingException {
 		switch (db.insertUnpackedObject(tmp, id, createDuplicate)) {
 		case INSERTED:
@@ -163,7 +164,7 @@ class ObjectDirectoryInserter extends ObjectInserter {
 			break;
 		}
 
-		final File dst = db.fileFor(id);
+		final Path dst = db.filePathFor(id);
 		throw new ObjectWritingException(MessageFormat
 				.format(JGitText.get().unableToCreateNewObject, dst));
 	}
@@ -199,72 +200,59 @@ class ObjectDirectoryInserter extends ObjectInserter {
 	}
 
 	@SuppressWarnings("resource" /* java 7 */)
-	private File toTemp(final SHA1 md, final int type, long len,
-			final InputStream is) throws IOException, FileNotFoundException,
+	private Path toTemp(final SHA1 md, final int type, long len,
+			final InputStream is) throws IOException, NoSuchFileException,
 			Error {
-		boolean delete = true;
-		File tmp = newTempFile();
-		try {
-			FileOutputStream fOut = new FileOutputStream(tmp);
-			try {
-				OutputStream out = fOut;
-				if (config.getFSyncObjectFiles())
-					out = Channels.newOutputStream(fOut.getChannel());
-				DeflaterOutputStream cOut = compress(out);
-				SHA1OutputStream dOut = new SHA1OutputStream(cOut, md);
-				writeHeader(dOut, type, len);
+		final boolean fsync = config.getFSyncObjectFiles();
+		final Path tmp = newTempFile();
 
-				final byte[] buf = buffer();
-				while (len > 0) {
-					int n = is.read(buf, 0, (int) Math.min(len, buf.length));
-					if (n <= 0)
-						throw shortInput(len);
-					dOut.write(buf, 0, n);
-					len -= n;
-				}
-				dOut.flush();
-				cOut.finish();
-			} finally {
-				if (config.getFSyncObjectFiles())
-					fOut.getChannel().force(true);
-				fOut.close();
-			}
+		try (OutputStream out = new BufferedOutputStream(
+                        Files.newOutputStream(tmp, 
+                        fsync ? new StandardOpenOption[] {StandardOpenOption.WRITE, StandardOpenOption.SYNC}
+                              : new StandardOpenOption[] {StandardOpenOption.WRITE}));
+                     DeflaterOutputStream cOut = compress(out);
+                     SHA1OutputStream dOut = new SHA1OutputStream(cOut, md);) {
+                    
+                        writeHeader(dOut, type, len);
 
-			delete = false;
-			return tmp;
-		} finally {
-			if (delete)
-				FileUtils.delete(tmp, FileUtils.RETRY);
+                        final byte[] buf = buffer();
+                        while (len > 0) {
+                                int n = is.read(buf, 0, (int) Math.min(len, buf.length));
+                                if (n <= 0)
+                                        throw shortInput(len);
+                                dOut.write(buf, 0, n);
+                                len -= n;
+                        }
+		} catch (IOException ex) {
+                        FileUtils.delete(tmp, FileUtils.RETRY);
+                        throw ex;
 		}
+                return tmp;
 	}
 
 	@SuppressWarnings("resource" /* java 7 */)
-	private File toTemp(final int type, final byte[] buf, final int pos,
-			final int len) throws IOException, FileNotFoundException {
-		boolean delete = true;
-		File tmp = newTempFile();
-		try {
-			FileOutputStream fOut = new FileOutputStream(tmp);
-			try {
-				OutputStream out = fOut;
-				if (config.getFSyncObjectFiles())
-					out = Channels.newOutputStream(fOut.getChannel());
-				DeflaterOutputStream cOut = compress(out);
-				writeHeader(cOut, type, len);
-				cOut.write(buf, pos, len);
-				cOut.finish();
-			} finally {
-				if (config.getFSyncObjectFiles())
-					fOut.getChannel().force(true);
-				fOut.close();
-			}
+	private Path toTemp(final int type, final byte[] buf, final int pos,
+			final int len) throws IOException, NoSuchFileException {
 
-			delete = false;
-			return tmp;
-		} finally {
-			if (delete)
-				FileUtils.delete(tmp, FileUtils.RETRY);
+                final boolean fsync = config.getFSyncObjectFiles();
+                final Path tmp = newTempFile();
+
+		try (OutputStream out = new BufferedOutputStream(
+                        Files.newOutputStream(tmp, 
+                        fsync ? new StandardOpenOption[] {StandardOpenOption.WRITE, StandardOpenOption.SYNC}
+                              : new StandardOpenOption[] {StandardOpenOption.WRITE}))) {
+
+                        DeflaterOutputStream cOut = compress(out);
+                        writeHeader(cOut, type, len);
+                        cOut.write(buf, pos, len);
+                        cOut.finish();
+
+		} catch (IOException ex) {
+                        FileUtils.delete(tmp, FileUtils.RETRY);
+                        throw ex;
 		}
+                return tmp;
+                
 	}
 
 	void writeHeader(OutputStream out, int type, long len)
@@ -275,8 +263,8 @@ class ObjectDirectoryInserter extends ObjectInserter {
 		out.write((byte) 0);
 	}
 
-	File newTempFile() throws IOException {
-		return File.createTempFile("noz", null, db.getDirectory()); //$NON-NLS-1$
+	Path newTempFile() throws IOException {
+                return Files.createTempFile(db.getDirectoryPath(), "noz", null); //$NON-NLS-1$
 	}
 
 	DeflaterOutputStream compress(OutputStream out) {

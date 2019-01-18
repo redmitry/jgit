@@ -42,10 +42,10 @@
  */
 package org.eclipse.jgit.transport;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.NoSuchFileException;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
@@ -218,7 +218,7 @@ public interface FtpChannel {
 	default void delete(String path) throws IOException {
 		try {
 			rm(path);
-		} catch (FileNotFoundException e) {
+		} catch (NoSuchFileException e) {
 			// Ignore; it's OK if the file doesn't exist
 		} catch (FtpException f) {
 			if (f.getStatus() == FtpException.NO_SUCH_FILE) {

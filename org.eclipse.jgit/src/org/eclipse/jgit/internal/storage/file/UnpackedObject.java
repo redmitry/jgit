@@ -47,11 +47,12 @@ package org.eclipse.jgit.internal.storage.file;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
@@ -96,7 +97,7 @@ public class UnpackedObject {
 		}
 	}
 
-	static ObjectLoader open(InputStream in, File path, AnyObjectId id,
+	static ObjectLoader open(InputStream in, Path path, AnyObjectId id,
 			WindowCursor wc) throws IOException {
 		try {
 			in = buffer(in);
@@ -357,13 +358,13 @@ public class UnpackedObject {
 
 		private final long size;
 
-		private final File path;
+		private final Path path;
 
 		private final ObjectId id;
 
 		private final FileObjectDatabase source;
 
-		LargeObject(int type, long size, File path, AnyObjectId id,
+		LargeObject(int type, long size, Path path, AnyObjectId id,
 				FileObjectDatabase db) {
 			this.type = type;
 			this.size = size;
@@ -397,9 +398,9 @@ public class UnpackedObject {
 				IOException {
 			InputStream in;
 			try {
-				in = buffer(new FileInputStream(path));
-			} catch (FileNotFoundException gone) {
-				if (path.exists()) {
+				in = buffer(Files.newInputStream(path, StandardOpenOption.READ));
+			} catch (NoSuchFileException gone) {
+				if (Files.exists(path)) {
 					throw gone;
 				}
 				// If the loose file no longer exists, it may have been

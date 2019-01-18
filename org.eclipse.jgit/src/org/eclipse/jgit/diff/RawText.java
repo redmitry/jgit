@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.errors.BinaryBlobException;
 import org.eclipse.jgit.errors.LargeObjectException;
@@ -114,6 +115,18 @@ public class RawText extends Sequence {
 	}
 
 	/**
+	 * @deprecated use {@link #RawText(Path)}
+	 *
+	 * @param file
+	 *            the text file.
+	 * @throws java.io.IOException
+	 *             if Exceptions occur while reading the file
+	 */
+	public RawText(File file) throws IOException {
+		this(file.toPath());
+	}
+
+	/**
 	 * Create a new sequence from a file.
 	 * <p>
 	 * The entire file contents are used.
@@ -123,7 +136,7 @@ public class RawText extends Sequence {
 	 * @throws java.io.IOException
 	 *             if Exceptions occur while reading the file
 	 */
-	public RawText(File file) throws IOException {
+	public RawText(Path file) throws IOException {
 		this(IO.readFully(file));
 	}
 

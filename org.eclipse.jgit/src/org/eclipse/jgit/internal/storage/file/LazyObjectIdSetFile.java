@@ -47,10 +47,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.lib.MutableObjectId;
@@ -61,16 +63,26 @@ import org.eclipse.jgit.lib.ObjectIdSet;
  * Lazily loads a set of ObjectIds, one per line.
  */
 public class LazyObjectIdSetFile implements ObjectIdSet {
-	private final File src;
+	private final Path src;
 	private ObjectIdOwnerMap<Entry> set;
 
+	/**
+	 * @deprecated use {@link #LazyObjectIdSetFile(Path)}
+	 *
+	 * @param src
+	 *            the source file.
+	 */
+	public LazyObjectIdSetFile(File src) {
+		this(src.toPath());
+	}
+        
 	/**
 	 * Create a new lazy set from a file.
 	 *
 	 * @param src
 	 *            the source file.
 	 */
-	public LazyObjectIdSetFile(File src) {
+	public LazyObjectIdSetFile(Path src) {
 		this.src = src;
 	}
 
@@ -85,7 +97,7 @@ public class LazyObjectIdSetFile implements ObjectIdSet {
 
 	private ObjectIdOwnerMap<Entry> load() {
 		ObjectIdOwnerMap<Entry> r = new ObjectIdOwnerMap<>();
-		try (FileInputStream fin = new FileInputStream(src);
+		try (InputStream fin = Files.newInputStream(src);
 				Reader rin = new InputStreamReader(fin, UTF_8);
 				BufferedReader br = new BufferedReader(rin)) {
 			MutableObjectId id = new MutableObjectId();

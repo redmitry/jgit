@@ -46,7 +46,7 @@ package org.eclipse.jgit.transport;
 import static org.eclipse.jgit.util.StringUtils.equalsIgnoreCase;
 import static org.eclipse.jgit.util.StringUtils.toLowerCase;
 
-import java.io.File;
+import java.nio.file.Paths;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -250,7 +250,7 @@ public class TransferConfig {
 
 	private ObjectIdSet skipList() {
 		if (fsckSkipList != null && !fsckSkipList.isEmpty()) {
-			return new LazyObjectIdSetFile(new File(fsckSkipList));
+			return new LazyObjectIdSetFile(Paths.get(fsckSkipList));
 		}
 		return null;
 	}

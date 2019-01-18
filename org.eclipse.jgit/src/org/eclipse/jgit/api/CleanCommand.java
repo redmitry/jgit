@@ -45,8 +45,9 @@ package org.eclipse.jgit.api;
 
 import static org.eclipse.jgit.lib.Constants.DOT_GIT;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Set;
 import java.util.TreeSet;
@@ -109,8 +110,8 @@ public class CleanCommand extends GitCommand<Set<String>> {
 
 			FS fs = getRepository().getFS();
 			for (String p : status.getIgnoredNotInIndex()) {
-				File f = new File(repo.getWorkTree(), p);
-				if (fs.isFile(f) || fs.isSymLink(f)) {
+                                final Path f = repo.getWorkTreePath().resolve(p);
+                                if (fs.isFile(f) || fs.isSymLink(f)) {
 					untrackedFiles.add(p);
 				} else if (fs.isDirectory(f)) {
 					untrackedDirs.add(p);
@@ -165,11 +166,11 @@ public class CleanCommand extends GitCommand<Set<String>> {
 	 */
 	private Set<String> cleanPath(String path, Set<String> inFiles)
 			throws IOException {
-		File curFile = new File(repo.getWorkTree(), path);
-		if (curFile.isDirectory()) {
+		final Path curFile = repo.getWorkTreePath().resolve(path);
+		if (Files.isDirectory(curFile)) {
 			if (directories) {
 				// Is this directory a git repository?
-				if (new File(curFile, DOT_GIT).exists()) {
+				if (Files.exists(curFile.resolve(DOT_GIT))) {
 					if (force) {
 						if (!dryRun) {
 							FileUtils.delete(curFile, FileUtils.RECURSIVE

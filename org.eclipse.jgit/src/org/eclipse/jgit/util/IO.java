@@ -52,13 +52,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.jgit.internal.JGitText;
-import org.eclipse.jgit.util.io.SilentFileInputStream;
 
 /**
  * Input/Output utilities
@@ -66,7 +70,7 @@ import org.eclipse.jgit.util.io.SilentFileInputStream;
 public class IO {
 
 	/**
-	 * Read an entire local file into memory as a byte array.
+	 * @deprecated use {@link #readFully(Path)}
 	 *
 	 * @param path
 	 *            location of the file to read.
@@ -78,11 +82,31 @@ public class IO {
 	 */
 	public static final byte[] readFully(File path)
 			throws FileNotFoundException, IOException {
-		return IO.readFully(path, Integer.MAX_VALUE);
+                try {
+                        return readFully(path.toPath());
+                } catch(NoSuchFileException ex) {
+                        throw new FileNotFoundException(ex.getMessage());
+                }
 	}
 
 	/**
-	 * Read at most limit bytes from the local file into memory as a byte array.
+	 * Read an entire local file into memory as a byte array.
+	 *
+	 * @param path
+	 *            location of the file to read.
+	 * @return complete contents of the requested local file.
+	 * @throws java.nio.file.NoSuchFileException
+	 *             the file does not exist.
+	 * @throws java.io.IOException
+	 *             the file exists, but its contents cannot be read.
+	 */
+	public static final byte[] readFully(Path path)
+			throws NoSuchFileException, IOException {
+		return readFully(path, Integer.MAX_VALUE);
+	}
+
+	/**
+	 * @deprecated use {@link #readSome(Path, int)}
 	 *
 	 * @param path
 	 *            location of the file to read.
@@ -98,25 +122,41 @@ public class IO {
 	 */
 	public static final byte[] readSome(File path, int limit)
 			throws FileNotFoundException, IOException {
-		try (SilentFileInputStream in = new SilentFileInputStream(path)) {
-			byte[] buf = new byte[limit];
-			int cnt = 0;
-			for (;;) {
-				int n = in.read(buf, cnt, buf.length - cnt);
-				if (n <= 0)
-					break;
-				cnt += n;
-			}
-			if (cnt == buf.length)
-				return buf;
-			byte[] res = new byte[cnt];
-			System.arraycopy(buf, 0, res, 0, cnt);
-			return res;
-		}
+            try {
+                return IO.readSome(path.toPath(), limit);
+            } catch(NoSuchFileException ex) {
+                throw new FileNotFoundException(ex.getMessage());
+            }
 	}
 
 	/**
-	 * Read an entire local file into memory as a byte array.
+	 * Read at most limit bytes from the local file into memory as a byte array.
+	 *
+	 * @param path
+	 *            location of the file to read.
+	 * @param limit
+	 *            maximum number of bytes to read, if the file is larger than
+	 *            only the first limit number of bytes are returned
+	 * @return complete contents of the requested local file. If the contents
+	 *         exceeds the limit, then only the limit is returned.
+	 * @throws java.nio.file.NoSuchFileException
+	 *             the file does not exist.
+	 * @throws java.io.IOException
+	 *             the file exists, but its contents cannot be read.
+	 */
+	public static final byte[] readSome(Path path, int limit)
+			throws NoSuchFileException, IOException {
+            
+                byte[] arr = new byte[(int)Math.min(limit, Files.size(path))];
+                ByteBuffer buf = ByteBuffer.wrap(arr);
+                try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
+                    while (buf.hasRemaining() && ch.read(buf) >= 0) {}
+                }
+                return arr;
+	}
+
+	/**
+	 * @deprecated use {@link #readFully(Path, int)}
 	 *
 	 * @param path
 	 *            location of the file to read.
@@ -131,42 +171,38 @@ public class IO {
 	 */
 	public static final byte[] readFully(File path, int max)
 			throws FileNotFoundException, IOException {
-		try (SilentFileInputStream in = new SilentFileInputStream(path)) {
-			long sz = Math.max(path.length(), 1);
-			if (sz > max)
-				throw new IOException(MessageFormat.format(
-						JGitText.get().fileIsTooLarge, path));
-
-			byte[] buf = new byte[(int) sz];
-			int valid = 0;
-			for (;;) {
-				if (buf.length == valid) {
-					if (buf.length == max) {
-						int next = in.read();
-						if (next < 0)
-							break;
-
-						throw new IOException(MessageFormat.format(
-								JGitText.get().fileIsTooLarge, path));
-					}
-
-					byte[] nb = new byte[Math.min(buf.length * 2, max)];
-					System.arraycopy(buf, 0, nb, 0, valid);
-					buf = nb;
-				}
-				int n = in.read(buf, valid, buf.length - valid);
-				if (n < 0)
-					break;
-				valid += n;
-			}
-			if (valid < buf.length) {
-				byte[] nb = new byte[valid];
-				System.arraycopy(buf, 0, nb, 0, valid);
-				buf = nb;
-			}
-			return buf;
-		}
+                try {
+                        return readFully(path.toPath(), max);
+                } catch(NoSuchFileException ex) {
+                        throw new FileNotFoundException(ex.getMessage());
+                }
 	}
+
+	/**
+	 * Read an entire local file into memory as a byte array.
+	 *
+	 * @param path
+	 *            location of the file to read.
+	 * @param max
+	 *            maximum number of bytes to read, if the file is larger than
+	 *            this limit an IOException is thrown.
+	 * @return complete contents of the requested local file.
+	 * @throws java.nio.file.NoSuchFileException
+	 *             the file does not exist.
+	 * @throws java.io.IOException
+	 *             the file exists, but its contents cannot be read.
+	 */
+	public static final byte[] readFully(Path path, int max)
+			throws NoSuchFileException, IOException {
+                
+                final long sz = Math.max(max, Files.size(path));
+                if (sz > max) {
+                        throw new IOException(MessageFormat.format(
+                                        JGitText.get().fileIsTooLarge, path));
+                }
+
+                return Files.readAllBytes(path);
+        }
 
 	/**
 	 * Read an entire input stream into memory as a ByteBuffer.

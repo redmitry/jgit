@@ -47,9 +47,13 @@
 package org.eclipse.jgit.internal.storage.file;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.util.HashSet;
@@ -130,6 +134,24 @@ public class FileRepository extends Repository {
 	private FileSnapshot snapshot;
 
 	/**
+	 * @deprecated use {@link #FileRepository(Path)}
+	 *
+	 * <pre>
+	 * new FileRepositoryBuilder().setGitDir(gitDir).build()
+	 * </pre>
+	 *
+	 * @param gitDir
+	 *            GIT_DIR (the location of the repository metadata).
+	 * @throws java.io.IOException
+	 *             the repository appears to already exist but cannot be
+	 *             accessed.
+	 * @see FileRepositoryBuilder
+	 */
+	public FileRepository(File gitDir) throws IOException {
+		this(gitDir.toPath());
+	}
+
+	/**
 	 * Construct a representation of a Git repository.
 	 * <p>
 	 * The work tree, object directory, alternate object directories and index
@@ -149,12 +171,12 @@ public class FileRepository extends Repository {
 	 *             accessed.
 	 * @see FileRepositoryBuilder
 	 */
-	public FileRepository(File gitDir) throws IOException {
+	public FileRepository(Path gitDir) throws IOException {
 		this(new FileRepositoryBuilder().setGitDir(gitDir).setup());
 	}
 
 	/**
-	 * A convenience API for {@link #FileRepository(File)}.
+	 * A convenience API for {@link #FileRepository(String)}.
 	 *
 	 * @param gitDir
 	 *            GIT_DIR (the location of the repository metadata).
@@ -164,7 +186,7 @@ public class FileRepository extends Repository {
 	 * @see FileRepositoryBuilder
 	 */
 	public FileRepository(String gitDir) throws IOException {
-		this(new File(gitDir));
+		this(Paths.get(gitDir));
 	}
 
 	/**
@@ -184,7 +206,7 @@ public class FileRepository extends Repository {
 			systemConfig = SystemReader.getInstance().openSystemConfig(null,
 					getFS());
 		else
-			systemConfig = new FileBasedConfig(null, FS.DETECTED) {
+			systemConfig = new FileBasedConfig((Path)null, FS.DETECTED) {
 				@Override
 				public void load() {
 					// empty, do not load
@@ -199,7 +221,7 @@ public class FileRepository extends Repository {
 		userConfig = SystemReader.getInstance().openUserConfig(systemConfig,
 				getFS());
 		repoConfig = new FileBasedConfig(userConfig, getFS().resolve(
-				getDirectory(), Constants.CONFIG),
+				getDirectoryPath(), Constants.CONFIG),
 				getFS());
 
 		loadSystemConfig();
@@ -230,20 +252,21 @@ public class FileRepository extends Repository {
 		}
 
 		objectDatabase = new ObjectDirectory(repoConfig, //
-				options.getObjectDirectory(), //
-				options.getAlternateObjectDirectories(), //
+				options.getObjectDirectoryPath(), //
+				options.getAlternateObjectDirectoriesPaths(), //
 				getFS(), //
-				new File(getDirectory(), Constants.SHALLOW));
+                                getDirectoryPath() != null ? getDirectoryPath().resolve(Constants.SHALLOW) :
+                                                             Paths.get(Constants.SHALLOW));
 
 		if (objectDatabase.exists()) {
 			if (repositoryFormatVersion > 1)
 				throw new IOException(MessageFormat.format(
 						JGitText.get().unknownRepositoryFormat2,
-						Long.valueOf(repositoryFormatVersion)));
+						repositoryFormatVersion));
 		}
 
 		if (!isBare()) {
-			snapshot = FileSnapshot.save(getIndexFile());
+			snapshot = FileSnapshot.save(getIndexFilePath());
 		}
 	}
 
@@ -252,8 +275,8 @@ public class FileRepository extends Repository {
 			systemConfig.load();
 		} catch (ConfigInvalidException e) {
 			throw new IOException(MessageFormat.format(JGitText
-					.get().systemConfigFileInvalid, systemConfig.getFile()
-							.getAbsolutePath(),
+					.get().systemConfigFileInvalid, systemConfig.getFilePath()
+							.toAbsolutePath(),
 					e), e);
 		}
 	}
@@ -263,8 +286,8 @@ public class FileRepository extends Repository {
 			userConfig.load();
 		} catch (ConfigInvalidException e) {
 			throw new IOException(MessageFormat.format(JGitText
-					.get().userConfigFileInvalid, userConfig.getFile()
-							.getAbsolutePath(),
+					.get().userConfigFileInvalid, userConfig.getFilePath()
+							.toAbsolutePath(),
 					e), e);
 		}
 	}
@@ -286,23 +309,27 @@ public class FileRepository extends Repository {
 	@Override
 	public void create(boolean bare) throws IOException {
 		final FileBasedConfig cfg = getConfig();
-		if (cfg.getFile().exists()) {
+		if (Files.exists(cfg.getFilePath())) {
 			throw new IllegalStateException(MessageFormat.format(
-					JGitText.get().repositoryAlreadyExists, getDirectory()));
+					JGitText.get().repositoryAlreadyExists, getDirectoryPath()));
 		}
-		FileUtils.mkdirs(getDirectory(), true);
+                try {
+                        Files.createDirectory(getDirectoryPath());
+                } catch (FileAlreadyExistsException ex) {}                
+                
 		HideDotFiles hideDotFiles = getConfig().getEnum(
 				ConfigConstants.CONFIG_CORE_SECTION, null,
 				ConfigConstants.CONFIG_KEY_HIDEDOTFILES,
 				HideDotFiles.DOTGITONLY);
 		if (hideDotFiles != HideDotFiles.FALSE && !isBare()
-				&& getDirectory().getName().startsWith(".")) //$NON-NLS-1$
-			getFS().setHidden(getDirectory(), true);
+				&& getDirectoryPath().getFileName().startsWith(".")) //$NON-NLS-1$
+			getFS().setHidden(getDirectoryPath(), true);
 		refs.create();
 		objectDatabase.create();
 
-		FileUtils.mkdir(new File(getDirectory(), "branches")); //$NON-NLS-1$
-		FileUtils.mkdir(new File(getDirectory(), "hooks")); //$NON-NLS-1$
+                final Path dir = getDirectoryPath();
+                Files.createDirectory(dir != null ? dir.resolve("branches") : Paths.get("branches")); //$NON-NLS-1$
+                Files.createDirectory(dir != null ? dir.resolve("hooks") : Paths.get("hooks")); //$NON-NLS-1$
 
 		RefUpdate head = updateRef(Constants.HEAD);
 		head.disableRefLog();
@@ -310,7 +337,7 @@ public class FileRepository extends Repository {
 
 		final boolean fileMode;
 		if (getFS().supportsExecute()) {
-			File tmp = File.createTempFile("try", "execute", getDirectory()); //$NON-NLS-1$ //$NON-NLS-2$
+                        Path tmp = Files.createTempFile(getDirectoryPath(), "try", "execute"); //$NON-NLS-1$ //$NON-NLS-2$
 
 			getFS().setExecute(tmp, true);
 			final boolean on = getFS().canExecute(tmp);
@@ -326,7 +353,8 @@ public class FileRepository extends Repository {
 
 		SymLinks symLinks = SymLinks.FALSE;
 		if (getFS().supportsSymlinks()) {
-			File tmp = new File(getDirectory(), "tmplink"); //$NON-NLS-1$
+                        Path tmp = getDirectoryPath() != null ? getDirectoryPath().resolve("tmplink")
+                                : Paths.get("tmplink"); //$NON-NLS-1$
 			try {
 				getFS().createSymLink(tmp, "target"); //$NON-NLS-1$
 				symLinks = null;
@@ -353,17 +381,16 @@ public class FileRepository extends Repository {
 			cfg.setBoolean(ConfigConstants.CONFIG_CORE_SECTION, null,
 					ConfigConstants.CONFIG_KEY_PRECOMPOSEUNICODE, true);
 		if (!bare) {
-			File workTree = getWorkTree();
-			if (!getDirectory().getParentFile().equals(workTree)) {
+			Path workTree = getWorkTreePath();
+			if (!getDirectoryPath().getParent().equals(workTree)) {
 				cfg.setString(ConfigConstants.CONFIG_CORE_SECTION, null,
-						ConfigConstants.CONFIG_KEY_WORKTREE, getWorkTree()
-								.getAbsolutePath());
-				LockFile dotGitLockFile = new LockFile(new File(workTree,
-						Constants.DOT_GIT));
+						ConfigConstants.CONFIG_KEY_WORKTREE, getWorkTreePath()
+								.toAbsolutePath().toString());
+				LockFile dotGitLockFile = new LockFile(workTree.resolve(Constants.DOT_GIT));
 				try {
 					if (dotGitLockFile.lock()) {
 						dotGitLockFile.write(Constants.encode(Constants.GITDIR
-								+ getDirectory().getAbsolutePath()));
+								+ getDirectoryPath().toAbsolutePath()));
 						dotGitLockFile.commit();
 					}
 				} finally {
@@ -375,12 +402,21 @@ public class FileRepository extends Repository {
 	}
 
 	/**
-	 * Get the directory containing the objects owned by this repository
+	 * @deprecated use {@link #getObjectsDirectoryPath()}
 	 *
 	 * @return the directory containing the objects owned by this repository.
 	 */
 	public File getObjectsDirectory() {
 		return objectDatabase.getDirectory();
+	}
+
+	/**
+	 * Get the directory containing the objects owned by this repository
+	 *
+	 * @return the directory containing the objects owned by this repository.
+	 */
+	public Path getObjectsDirectoryPath() {
+		return objectDatabase.getDirectoryPath();
 	}
 
 	/** {@inheritDoc} */
@@ -429,7 +465,7 @@ public class FileRepository extends Repository {
 		String d;
 		try {
 			d = RawParseUtils.decode(IO.readFully(descriptionFile()));
-		} catch (FileNotFoundException err) {
+		} catch (NoSuchFileException err) {
 			return null;
 		}
 		if (d != null) {
@@ -450,11 +486,11 @@ public class FileRepository extends Repository {
 			return;
 		}
 
-		File path = descriptionFile();
+		Path path = descriptionFile();
 		LockFile lock = new LockFile(path);
 		if (!lock.lock()) {
 			throw new IOException(MessageFormat.format(JGitText.get().lockError,
-					path.getAbsolutePath()));
+					path.toAbsolutePath()));
 		}
 		try {
 			String d = description;
@@ -473,8 +509,9 @@ public class FileRepository extends Repository {
 		}
 	}
 
-	private File descriptionFile() {
-		return new File(getDirectory(), "description"); //$NON-NLS-1$
+	private Path descriptionFile() {
+            Path path = getDirectoryPath();
+            return path != null ? path.resolve("description") : Paths.get("description"); //$NON-NLS-1$
 	}
 
 	/**
@@ -526,7 +563,7 @@ public class FileRepository extends Repository {
 	}
 
 	/**
-	 * Add a single existing pack to the list of available pack files.
+	 * @deprecated use {@link #openPack(Path)}
 	 *
 	 * @param pack
 	 *            path of the pack file to open.
@@ -535,6 +572,19 @@ public class FileRepository extends Repository {
 	 *             a Git pack file index.
 	 */
 	public void openPack(File pack) throws IOException {
+		openPack(pack.toPath());
+	}
+
+	/**
+	 * Add a single existing pack to the list of available pack files.
+	 *
+	 * @param pack
+	 *            path of the pack file to open.
+	 * @throws java.io.IOException
+	 *             index file could not be opened, read, or is not recognized as
+	 *             a Git pack file index.
+	 */
+	public void openPack(Path pack) throws IOException {
 		objectDatabase.openPack(pack);
 	}
 
@@ -551,7 +601,7 @@ public class FileRepository extends Repository {
 			return;
 		}
 
-		File indexFile = getIndexFile();
+		Path indexFile = getIndexFilePath();
 		synchronized (snapshotLock) {
 			if (snapshot == null) {
 				snapshot = FileSnapshot.save(indexFile);
@@ -568,7 +618,7 @@ public class FileRepository extends Repository {
 	@Override
 	public void notifyIndexChanged(boolean internal) {
 		synchronized (snapshotLock) {
-			snapshot = FileSnapshot.save(getIndexFile());
+			snapshot = FileSnapshot.save(getIndexFilePath());
 		}
 		fireEvent(new IndexChangedEvent(internal));
 	}
@@ -629,10 +679,10 @@ public class FileRepository extends Repository {
 			return globalAttributesNode;
 		}
 
-		static void loadRulesFromFile(AttributesNode r, File attrs)
-				throws FileNotFoundException, IOException {
-			if (attrs.exists()) {
-				try (FileInputStream in = new FileInputStream(attrs)) {
+		static void loadRulesFromFile(AttributesNode r, Path attrs)
+				throws NoSuchFileException, IOException {
+			if (Files.exists(attrs)) {
+				try (InputStream in = Files.newInputStream(attrs)) {
 					r.parse(in);
 				}
 			}

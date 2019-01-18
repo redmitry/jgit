@@ -51,10 +51,10 @@ package org.eclipse.jgit.transport;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.Serializable;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileSystems;
 import java.util.BitSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -758,7 +758,7 @@ public class URIish implements Serializable {
 
 		String[] elements;
 		if ("file".equals(scheme) || LOCAL_FILE.matcher(s).matches()) //$NON-NLS-1$
-			elements = s.split("[\\" + File.separatorChar + "/]"); //$NON-NLS-1$ //$NON-NLS-2$
+			elements = s.split("[\\" + FileSystems.getDefault().getSeparator() + "/]"); //$NON-NLS-1$ //$NON-NLS-2$
 		else
 			elements = s.split("/+"); //$NON-NLS-1$
 		if (elements.length == 0)

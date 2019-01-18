@@ -44,10 +44,10 @@ package org.eclipse.jgit.dircache;
 
 import static org.eclipse.jgit.treewalk.TreeWalk.OperationType.CHECKOUT_OP;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -526,7 +526,7 @@ public class DirCacheCheckout {
 			monitor.beginTask(JGitText.get().checkingOutFiles, numTotal);
 
 			performingCheckout = true;
-			File file = null;
+			Path file = null;
 			String last = null;
 			// when deleting files process them in the opposite order as they have
 			// been reported. This ensures the files are deleted before we delete
@@ -534,22 +534,27 @@ public class DirCacheCheckout {
 			IntList nonDeleted = new IntList();
 			for (int i = removed.size() - 1; i >= 0; i--) {
 				String r = removed.get(i);
-				file = new File(repo.getWorkTree(), r);
-				if (!file.delete() && repo.getFS().exists(file)) {
+				file = repo.getWorkTreePath().resolve(r);
+                                try {
+                                        if (repo.getFS().exists(file)) {
+                                                repo.getFS().delete(file);
+                                        }
+                                        
+					if (last != null && !isSamePrefix(r, last))
+						removeEmptyParents(repo.getWorkTreePath().resolve(last));
+					last = r;
+                                } catch(IOException ex) {
 					// The list of stuff to delete comes from the index
 					// which will only contain a directory if it is
 					// a submodule, in which case we shall not attempt
 					// to delete it. A submodule is not empty, so it
 					// is safe to check this after a failed delete.
+
 					if (!repo.getFS().isDirectory(file)) {
 						nonDeleted.add(i);
 						toBeDeleted.add(r);
 					}
-				} else {
-					if (last != null && !isSamePrefix(r, last))
-						removeEmptyParents(new File(repo.getWorkTree(), last));
-					last = r;
-				}
+                                }
 				monitor.update(1);
 				if (monitor.isCancelled()) {
 					throw new CanceledException(MessageFormat.format(
@@ -630,12 +635,12 @@ public class DirCacheCheckout {
 			if (!builder.commit())
 				throw new IndexWriteException();
 		}
-		return toBeDeleted.size() == 0;
+		return toBeDeleted.isEmpty();
 	}
 
 	private void checkoutGitlink(String path, DirCacheEntry entry)
 			throws IOException {
-		File gitlinkDir = new File(repo.getWorkTree(), path);
+		Path gitlinkDir = repo.getWorkTreePath().resolve(path);
 		FileUtils.mkdirs(gitlinkDir, true);
 		FS fs = repo.getFS();
 		entry.setLastModified(fs.lastModified(gitlinkDir));
@@ -677,13 +682,16 @@ public class DirCacheCheckout {
 		return a.substring(0, as + 1).equals(b.substring(0, bs + 1));
 	}
 
-	 private void removeEmptyParents(File f) {
-		File parentFile = f.getParentFile();
+	private void removeEmptyParents(Path f) {
+		Path parentFile = f.getParent();
 
-		while (parentFile != null && !parentFile.equals(repo.getWorkTree())) {
-			if (!parentFile.delete())
-				break;
-			parentFile = parentFile.getParentFile();
+		while (parentFile != null && !parentFile.equals(repo.getWorkTreePath())) {
+                        try {
+                            Files.deleteIfExists(parentFile);
+                        } catch (IOException ex) {
+                            break;
+                        }
+			parentFile = parentFile.getParent();
 		}
 	}
 
@@ -1270,18 +1278,24 @@ public class DirCacheCheckout {
 	private void cleanUpConflicts() throws CheckoutConflictException {
 		// TODO: couldn't we delete unsaved worktree content here?
 		for (String c : conflicts) {
-			File conflict = new File(repo.getWorkTree(), c);
-			if (!conflict.delete())
+			final Path conflict = repo.getWorkTreePath().resolve(c);
+                        try {
+                            Files.deleteIfExists(conflict);
+                        } catch(IOException ex) {
 				throw new CheckoutConflictException(MessageFormat.format(
 						JGitText.get().cannotDeleteFile, c));
+                        }
 			removeEmptyParents(conflict);
 		}
 		for (String r : removed) {
-			File file = new File(repo.getWorkTree(), r);
-			if (!file.delete())
+			Path file = repo.getWorkTreePath().resolve(r);
+                        try {
+                            Files.deleteIfExists(file);
+                        } catch(IOException ex) {
 				throw new CheckoutConflictException(
 						MessageFormat.format(JGitText.get().cannotDeleteFile,
-								file.getAbsolutePath()));
+								file.toAbsolutePath()));
+                        }
 			removeEmptyParents(file);
 		}
 	}
@@ -1446,8 +1460,8 @@ public class DirCacheCheckout {
 		if (checkoutMetadata == null)
 			checkoutMetadata = CheckoutMetadata.EMPTY;
 		ObjectLoader ol = or.open(entry.getObjectId());
-		File f = new File(repo.getWorkTree(), entry.getPathString());
-		File parentDir = f.getParentFile();
+		Path f = repo.getWorkTreePath().resolve(entry.getPathString());
+		Path parentDir = f.getParent();
 		FileUtils.mkdirs(parentDir, true);
 		FS fs = repo.getFS();
 		WorkingTreeOptions opt = repo.getConfig().get(WorkingTreeOptions.KEY);
@@ -1455,7 +1469,7 @@ public class DirCacheCheckout {
 				&& opt.getSymLinks() == SymLinks.TRUE) {
 			byte[] bytes = ol.getBytes();
 			String target = RawParseUtils.decode(bytes);
-			if (deleteRecursive && f.isDirectory()) {
+			if (deleteRecursive && Files.isDirectory(f)) {
 				FileUtils.delete(f, FileUtils.RECURSIVE);
 			}
 			fs.createSymLink(f, target);
@@ -1464,12 +1478,11 @@ public class DirCacheCheckout {
 			return;
 		}
 
-		String name = f.getName();
+		String name = f.getFileName().toString();
 		if (name.length() > 200) {
 			name = name.substring(0, 200);
 		}
-		File tmpFile = File.createTempFile(
-				"._" + name, null, parentDir); //$NON-NLS-1$
+                Path tmpFile = Files.createTempFile(parentDir, "._" + name, null); //$NON-NLS-1$
 
 		EolStreamType nonNullEolStreamType;
 		if (checkoutMetadata.eolStreamType != null) {
@@ -1480,7 +1493,7 @@ public class DirCacheCheckout {
 			nonNullEolStreamType = EolStreamType.DIRECT;
 		}
 		try (OutputStream channel = EolStreamTypeUtil.wrapOutputStream(
-				new FileOutputStream(tmpFile), nonNullEolStreamType)) {
+				Files.newOutputStream(tmpFile), nonNullEolStreamType)) {
 			if (checkoutMetadata.smudgeFilterCommand != null) {
 				if (FilterCommandRegistry
 						.isRegistered(checkoutMetadata.smudgeFilterCommand)) {
@@ -1502,7 +1515,7 @@ public class DirCacheCheckout {
 				&& checkoutMetadata.smudgeFilterCommand == null) {
 			entry.setLength(ol.getSize());
 		} else {
-			entry.setLength(tmpFile.length());
+			entry.setLength(Files.size(tmpFile));
 		}
 
 		if (opt.isFileMode() && fs.supportsExecute()) {
@@ -1515,17 +1528,17 @@ public class DirCacheCheckout {
 			}
 		}
 		try {
-			if (deleteRecursive && f.isDirectory()) {
+			if (deleteRecursive && Files.isDirectory(f)) {
 				FileUtils.delete(f, FileUtils.RECURSIVE);
 			}
 			FileUtils.rename(tmpFile, f, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
 			throw new IOException(
 					MessageFormat.format(JGitText.get().renameFileFailed,
-							tmpFile.getPath(), f.getPath()),
+							tmpFile, f),
 					e);
 		} finally {
-			if (tmpFile.exists()) {
+			if (Files.exists(tmpFile)) {
 				FileUtils.delete(tmpFile);
 			}
 		}
@@ -1539,9 +1552,9 @@ public class DirCacheCheckout {
 			OutputStream channel) throws IOException {
 		ProcessBuilder filterProcessBuilder = fs.runInShell(
 				checkoutMetadata.smudgeFilterCommand, new String[0]);
-		filterProcessBuilder.directory(repo.getWorkTree());
+		filterProcessBuilder.directory(repo.getWorkTreePath().toFile());
 		filterProcessBuilder.environment().put(Constants.GIT_DIR_KEY,
-				repo.getDirectory().getAbsolutePath());
+				repo.getDirectoryPath().toAbsolutePath().toString());
 		ExecutionResult result;
 		int rc;
 		try {

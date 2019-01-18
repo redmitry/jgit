@@ -53,12 +53,12 @@ import static org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_ALGORITHM;
 import static org.eclipse.jgit.lib.Constants.OBJ_BLOB;
 
 import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -107,6 +107,7 @@ import org.eclipse.jgit.treewalk.WorkingTreeIterator;
 import org.eclipse.jgit.treewalk.WorkingTreeOptions;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
 import org.eclipse.jgit.util.FS;
+import org.eclipse.jgit.util.FileUtils;
 import org.eclipse.jgit.util.LfsFactory;
 import org.eclipse.jgit.util.LfsFactory.LfsInputStream;
 import org.eclipse.jgit.util.TemporaryBuffer;
@@ -401,18 +402,23 @@ public class ResolveMerger extends ThreeWayMerger {
 		// of a non-empty directory, for which delete() would fail.
 		for (int i = toBeDeleted.size() - 1; i >= 0; i--) {
 			String fileName = toBeDeleted.get(i);
-			File f = new File(nonNullRepo().getWorkTree(), fileName);
-			if (!f.delete())
-				if (!f.isDirectory())
+                        Path f = nonNullRepo().getWorkTreePath().resolve(fileName);
+                        try {
+                            FileUtils.delete(f);
+                        } catch(IOException ex) {
+                                if (!Files.isDirectory(f)) {
 					failingPaths.put(fileName,
 							MergeFailureReason.COULD_NOT_DELETE);
+                                }
+                        }
+
 			modifiedFiles.add(fileName);
 		}
 		for (Map.Entry<String, DirCacheEntry> entry : toBeCheckedOut
 				.entrySet()) {
 			DirCacheEntry cacheEntry = entry.getValue();
 			if (cacheEntry.getFileMode() == FileMode.GITLINK) {
-				new File(nonNullRepo().getWorkTree(), entry.getKey()).mkdirs();
+                                FileUtils.mkdirs(nonNullRepo().getWorkTreePath().resolve(entry.getKey()));
 			} else {
 				DirCacheCheckout.checkoutEntry(db, cacheEntry, reader, false,
 						checkoutMetadata.get(entry.getKey()));
@@ -940,18 +946,18 @@ public class ResolveMerger extends ThreeWayMerger {
 	 * @param theirs
 	 * @param result
 	 * @param attributes
-	 * @throws FileNotFoundException
+	 * @throws NoSuchFileException
 	 * @throws IOException
 	 */
 	private void updateIndex(CanonicalTreeParser base,
 			CanonicalTreeParser ours, CanonicalTreeParser theirs,
 			MergeResult<RawText> result, Attributes attributes)
-			throws FileNotFoundException,
+			throws NoSuchFileException,
 			IOException {
 		TemporaryBuffer rawMerged = null;
 		try {
 			rawMerged = doMerge(result);
-			File mergedFile = inCore ? null
+			Path mergedFile = inCore ? null
 					: writeMergedFile(rawMerged, attributes);
 			if (result.containsConflicts()) {
 				// A conflict occurred, the file will contain conflict markers
@@ -977,7 +983,7 @@ public class ResolveMerger extends ThreeWayMerger {
 			if (mergedFile != null) {
 				dce.setLastModified(
 						nonNullRepo().getFS().lastModified(mergedFile));
-				dce.setLength((int) mergedFile.length());
+				dce.setLength(Files.size(mergedFile));
 			}
 			dce.setObjectId(insertMergeResult(rawMerged, attributes));
 			builder.add(dce);
@@ -996,24 +1002,24 @@ public class ResolveMerger extends ThreeWayMerger {
 	 * @param attributes
 	 *            the files .gitattributes entries
 	 * @return the working tree file to which the merged content was written.
-	 * @throws FileNotFoundException
+	 * @throws NoSuchFileException
 	 * @throws IOException
 	 */
-	private File writeMergedFile(TemporaryBuffer rawMerged,
+	private Path writeMergedFile(TemporaryBuffer rawMerged,
 			Attributes attributes)
-			throws FileNotFoundException, IOException {
-		File workTree = nonNullRepo().getWorkTree();
+			throws NoSuchFileException, IOException {
+		Path workTree = nonNullRepo().getWorkTreePath();
 		FS fs = nonNullRepo().getFS();
-		File of = new File(workTree, tw.getPathString());
-		File parentFolder = of.getParentFile();
+		Path of = workTree.resolve(tw.getPathString());
+		Path parentFolder = of.getParent();
 		if (!fs.exists(parentFolder)) {
-			parentFolder.mkdirs();
+                        FileUtils.mkdirs(parentFolder);
 		}
 		EolStreamType streamType = EolStreamTypeUtil.detectStreamType(
 				OperationType.CHECKOUT_OP, workingTreeOptions,
 				attributes);
 		try (OutputStream os = EolStreamTypeUtil.wrapOutputStream(
-				new BufferedOutputStream(new FileOutputStream(of)),
+				new BufferedOutputStream(Files.newOutputStream(of)),
 				streamType)) {
 			rawMerged.writeTo(os, null);
 		}
@@ -1023,7 +1029,7 @@ public class ResolveMerger extends ThreeWayMerger {
 	private TemporaryBuffer doMerge(MergeResult<RawText> result)
 			throws IOException {
 		TemporaryBuffer.LocalFile buf = new TemporaryBuffer.LocalFile(
-				db != null ? nonNullRepo().getDirectory() : null, inCoreLimit);
+				db != null ? nonNullRepo().getDirectoryPath() : null, inCoreLimit);
 		try {
 			new MergeFormatter().formatMerge(buf, result,
 					Arrays.asList(commitNames), UTF_8);

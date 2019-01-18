@@ -47,6 +47,7 @@ import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.jgit.diff.Sequence;
 
 import org.eclipse.jgit.internal.JGitText;
 import org.eclipse.jgit.lib.ObjectId;
@@ -270,7 +271,7 @@ public class MergeResult {
 	public MergeResult(ObjectId newHead, ObjectId base,
 			ObjectId[] mergedCommits, MergeStatus mergeStatus,
 			MergeStrategy mergeStrategy,
-			Map<String, org.eclipse.jgit.merge.MergeResult<?>> lowLevelResults) {
+                        Map<String, org.eclipse.jgit.merge.MergeResult<? extends Sequence>> lowLevelResults) {
 		this(newHead, base, mergedCommits, mergeStatus, mergeStrategy,
 				lowLevelResults, null);
 	}
@@ -299,7 +300,7 @@ public class MergeResult {
 	public MergeResult(ObjectId newHead, ObjectId base,
 			ObjectId[] mergedCommits, MergeStatus mergeStatus,
 			MergeStrategy mergeStrategy,
-			Map<String, org.eclipse.jgit.merge.MergeResult<?>> lowLevelResults,
+                        Map<String, org.eclipse.jgit.merge.MergeResult<? extends Sequence>> lowLevelResults,
 			String description) {
 		this(newHead, base, mergedCommits, mergeStatus, mergeStrategy,
 				lowLevelResults, null, description);
@@ -332,7 +333,7 @@ public class MergeResult {
 	public MergeResult(ObjectId newHead, ObjectId base,
 			ObjectId[] mergedCommits, MergeStatus mergeStatus,
 			MergeStrategy mergeStrategy,
-			Map<String, org.eclipse.jgit.merge.MergeResult<?>> lowLevelResults,
+			Map<String, org.eclipse.jgit.merge.MergeResult<? extends Sequence>> lowLevelResults,
 			Map<String, MergeFailureReason> failingPaths, String description) {
 		this.newHead = newHead;
 		this.mergedCommits = mergedCommits;

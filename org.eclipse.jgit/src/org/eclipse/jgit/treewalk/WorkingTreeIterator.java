@@ -49,15 +49,15 @@ package org.eclipse.jgit.treewalk;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetEncoder;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -360,9 +360,9 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 	protected byte[] idSubmodule(Entry e) {
 		if (repository == null)
 			return zeroid;
-		File directory;
+		Path directory;
 		try {
-			directory = repository.getWorkTree();
+			directory = repository.getWorkTreePath();
 		} catch (NoWorkTreeException nwte) {
 			return zeroid;
 		}
@@ -374,13 +374,13 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 	 * relative to the directory.
 	 *
 	 * @param directory
-	 *            a {@link java.io.File} object.
+	 *            a {@link java.nio.file.Path} object.
 	 * @param e
 	 *            a {@link org.eclipse.jgit.treewalk.WorkingTreeIterator.Entry}
 	 *            object.
 	 * @return non-null submodule id
 	 */
-	protected byte[] idSubmodule(File directory, Entry e) {
+	protected byte[] idSubmodule(Path directory, Entry e) {
 		try (Repository submoduleRepo = SubmoduleWalk.getSubmoduleRepository(
 				directory, e.getName(),
 				repository != null ? repository.getFS() : FS.DETECTED)) {
@@ -502,7 +502,7 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 		String filterCommand = getCleanFilterCommand();
 		if (filterCommand != null) {
 			if (FilterCommandRegistry.isRegistered(filterCommand)) {
-				LocalFile buffer = new TemporaryBuffer.LocalFile(null);
+				LocalFile buffer = new TemporaryBuffer.LocalFile((Path)null);
 				FilterCommand command = FilterCommandRegistry
 						.createFilterCommand(filterCommand, repository, in,
 								buffer);
@@ -514,9 +514,11 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 			FS fs = repository.getFS();
 			ProcessBuilder filterProcessBuilder = fs.runInShell(filterCommand,
 					new String[0]);
-			filterProcessBuilder.directory(repository.getWorkTree());
+                        
+			filterProcessBuilder.directory(repository.getWorkTreePath().toFile());
+                        
 			filterProcessBuilder.environment().put(Constants.GIT_DIR_KEY,
-					repository.getDirectory().getAbsolutePath());
+					repository.getDirectoryPath().toAbsolutePath().toString());
 			ExecutionResult result;
 			try {
 				result = fs.execute(filterProcessBuilder, in);
@@ -1001,8 +1003,8 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 					return true;
 				} else if (ObjectId.zeroId().compareTo(idBuffer,
 						idOffset) == 0) {
-					return new File(repository.getWorkTree(),
-							entry.getPathString()).list().length > 0;
+					return Files.list(repository.getWorkTreePath().resolve(
+							entry.getPathString())).count() > 0;
 				}
 				return false;
 			} else if (mode == FileMode.SYMLINK.getBits())
@@ -1085,8 +1087,8 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 			return false;
 		} else {
 			if (mode == FileMode.SYMLINK.getBits()) {
-				return !new File(readSymlinkTarget(current())).equals(
-						new File(readContentAsNormalizedString(entry, reader)));
+				return !java.nio.file.Paths.get(readSymlinkTarget(current())).equals(
+						java.nio.file.Paths.get(readContentAsNormalizedString(entry, reader)));
 			}
 			// Content differs: that's a real change, perhaps
 			if (reader == null) // deprecated use, do no further checks
@@ -1348,25 +1350,25 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 			String path = repository.getConfig().get(CoreConfig.KEY)
 					.getExcludesFile();
 			if (path != null) {
-				File excludesfile;
+				Path excludesfile;
 				if (path.startsWith("~/")) //$NON-NLS-1$
-					excludesfile = fs.resolve(fs.userHome(), path.substring(2));
+					excludesfile = fs.resolve(fs.userHomePath(), path.substring(2));
 				else
-					excludesfile = fs.resolve(null, path);
+					excludesfile = fs.resolve((Path)null, path);
 				loadRulesFromFile(r, excludesfile);
 			}
 
-			File exclude = fs.resolve(repository.getDirectory(),
+			Path exclude = fs.resolve(repository.getDirectoryPath(),
 					Constants.INFO_EXCLUDE);
 			loadRulesFromFile(r, exclude);
 
 			return r.getRules().isEmpty() ? null : r;
 		}
 
-		private static void loadRulesFromFile(IgnoreNode r, File exclude)
-				throws FileNotFoundException, IOException {
+		private static void loadRulesFromFile(IgnoreNode r, Path exclude)
+				throws NoSuchFileException, IOException {
 			if (FS.DETECTED.exists(exclude)) {
-				try (FileInputStream in = new FileInputStream(exclude)) {
+				try (InputStream in = Files.newInputStream(exclude)) {
 					r.parse(in);
 				}
 			}

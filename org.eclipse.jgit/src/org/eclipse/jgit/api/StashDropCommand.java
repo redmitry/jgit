@@ -44,8 +44,9 @@ package org.eclipse.jgit.api;
 
 import static org.eclipse.jgit.lib.Constants.R_STASH;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.util.List;
@@ -220,11 +221,12 @@ public class StashDropCommand extends GitCommand<ObjectId> {
 		RefDirectory refdb = (RefDirectory) repo.getRefDatabase();
 		ReflogWriter writer = new ReflogWriter(refdb, true);
 		String stashLockRef = ReflogWriter.refLockFor(R_STASH);
-		File stashLockFile = refdb.logFor(stashLockRef);
-		File stashFile = refdb.logFor(R_STASH);
-		if (stashLockFile.exists())
+		Path stashLockFile = refdb.logForPath(stashLockRef);
+		Path stashFile = refdb.logForPath(R_STASH);
+		if (Files.exists(stashLockFile)) {
 			throw new JGitInternalException(JGitText.get().stashDropFailed,
 					new LockFailedException(stashFile));
+                }
 
 		entries.remove(stashRefEntry);
 		ObjectId entryId = ObjectId.zeroId();
@@ -241,7 +243,7 @@ public class StashDropCommand extends GitCommand<ObjectId> {
 			} catch (IOException e) {
 					throw new JGitInternalException(MessageFormat.format(
 							JGitText.get().renameFileFailed,
-								stashLockFile.getPath(), stashFile.getPath()),
+								stashLockFile, stashFile),
 						e);
 			}
 		} catch (IOException e) {

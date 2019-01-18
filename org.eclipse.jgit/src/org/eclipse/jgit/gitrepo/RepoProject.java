@@ -42,11 +42,9 @@
  */
 package org.eclipse.jgit.gitrepo;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,6 +54,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.util.FileUtils;
 
 /**
  * The representation of a repo sub project.
@@ -128,15 +127,11 @@ public class RepoProject implements Comparable<RepoProject> {
 		 * @throws IOException
 		 */
 		public void copy() throws IOException {
-			File srcFile = new File(repo.getWorkTree(),
+			Path srcFile = repo.getWorkTreePath().resolve(
 					path + "/" + src); //$NON-NLS-1$
-			File destFile = new File(repo.getWorkTree(), dest);
-			try (FileInputStream input = new FileInputStream(srcFile);
-					FileOutputStream output = new FileOutputStream(destFile)) {
-				FileChannel channel = input.getChannel();
-				output.getChannel().transferFrom(channel, 0, channel.size());
-			}
-			destFile.setExecutable(srcFile.canExecute());
+			Path destFile = repo.getWorkTreePath().resolve(dest);
+                        Files.copy(srcFile, destFile);
+                        FileUtils.setExecutable(destFile, FileUtils.canExecute(srcFile));
 		}
 	}
 

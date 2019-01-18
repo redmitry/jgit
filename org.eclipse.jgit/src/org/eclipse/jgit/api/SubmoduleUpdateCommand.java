@@ -43,8 +43,9 @@
  */
 package org.eclipse.jgit.api;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -159,10 +160,13 @@ public class SubmoduleUpdateCommand extends
 			CloneCommand clone = Git.cloneRepository();
 			configure(clone);
 			clone.setURI(url);
-			clone.setDirectory(generator.getDirectory());
-			clone.setGitDir(
-					new File(new File(repo.getDirectory(), Constants.MODULES),
-							generator.getPath()));
+			clone.setDirectory(generator.getDirectoryPath());
+                        
+                        Path directoryPath = repo.getDirectoryPath();
+                        Path gitDir = directoryPath != null ? directoryPath.resolve(Constants.MODULES)
+                                                            : Paths.get(Constants.MODULES);
+			clone.setGitDir(gitDir.resolve(generator.getPath()));
+                        
 			if (monitor != null) {
 				clone.setProgressMonitor(monitor);
 			}

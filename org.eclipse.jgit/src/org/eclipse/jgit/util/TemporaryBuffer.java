@@ -46,11 +46,13 @@ package org.eclipse.jgit.util;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 
 import org.eclipse.jgit.internal.JGitText;
@@ -422,7 +424,7 @@ public abstract class TemporaryBuffer extends OutputStream {
 	 */
 	public static class LocalFile extends TemporaryBuffer {
 		/** Directory to store the temporary file under. */
-		private final File directory;
+		private final Path directory;
 
 		/**
 		 * Location of our temporary file if we are on disk; otherwise null.
@@ -431,10 +433,10 @@ public abstract class TemporaryBuffer extends OutputStream {
 		 * and created this file instead. All output goes here through
 		 * {@link #overflow}.
 		 */
-		private File onDiskFile;
+		private Path onDiskFile;
 
 		/**
-		 * Create a new temporary buffer, limiting memory usage.
+		 * @deprecated use {@link #LocalFile(Path)}
 		 *
 		 * @param directory
 		 *            if the buffer has to spill over into a temporary file, the
@@ -454,27 +456,58 @@ public abstract class TemporaryBuffer extends OutputStream {
 		 *            directory where the file should be saved. If null the
 		 *            system default temporary directory (for example /tmp) will
 		 *            be used instead.
+		 */
+		public LocalFile(Path directory) {
+			this(directory, DEFAULT_IN_CORE_LIMIT);
+		}
+
+		/**
+		 * @deprecated use {@link #LocalFile(Path, int)}
+		 *
+		 * @param directory
+		 *            if the buffer has to spill over into a temporary file, the
+		 *            directory where the file should be saved. If null the
+		 *            system default temporary directory (for example /tmp) will
+		 *            be used instead.
 		 * @param inCoreLimit
 		 *            maximum number of bytes to store in memory. Storage beyond
 		 *            this limit will use the local file.
 		 */
 		public LocalFile(File directory, int inCoreLimit) {
+			this(directory.toPath(), inCoreLimit);
+		}
+
+		/**
+		 * Create a new temporary buffer, limiting memory usage.
+		 *
+		 * @param directory
+		 *            if the buffer has to spill over into a temporary file, the
+		 *            directory where the file should be saved. If null the
+		 *            system default temporary directory (for example /tmp) will
+		 *            be used instead.
+		 * @param inCoreLimit
+		 *            maximum number of bytes to store in memory. Storage beyond
+		 *            this limit will use the local file.
+		 */
+		public LocalFile(Path directory, int inCoreLimit) {
 			super(inCoreLimit);
 			this.directory = directory;
 		}
 
 		@Override
 		protected OutputStream overflow() throws IOException {
-			onDiskFile = File.createTempFile("jgit_", ".buf", directory); //$NON-NLS-1$ //$NON-NLS-2$
-			return new BufferedOutputStream(new FileOutputStream(onDiskFile));
+                        onDiskFile = Files.createTempFile(directory, "jgit_", ".buf"); //$NON-NLS-1$ //$NON-NLS-2$
+			return new BufferedOutputStream(Files.newOutputStream(onDiskFile));
 		}
 
 		@Override
 		public long length() {
-			if (onDiskFile == null) {
-				return super.length();
-			}
-			return onDiskFile.length();
+			if (onDiskFile != null) {
+                            try {
+                                return Files.size(onDiskFile);
+                            } catch (IOException ex) {}
+                        }
+                        return super.length();
 		}
 
 		@Override
@@ -483,14 +516,11 @@ public abstract class TemporaryBuffer extends OutputStream {
 				return super.toByteArray();
 			}
 
-			final long len = length();
-			if (Integer.MAX_VALUE < len)
+			if (Integer.MAX_VALUE < length()) {
 				throw new OutOfMemoryError(JGitText.get().lengthExceedsMaximumArraySize);
-			final byte[] out = new byte[(int) len];
-			try (FileInputStream in = new FileInputStream(onDiskFile)) {
-				IO.readFully(in, out, 0, (int) len);
-			}
-			return out;
+                        }
+
+                        return Files.readAllBytes(onDiskFile);
 		}
 
 		@Override
@@ -502,7 +532,7 @@ public abstract class TemporaryBuffer extends OutputStream {
 			}
 			if (pm == null)
 				pm = NullProgressMonitor.INSTANCE;
-			try (FileInputStream in = new FileInputStream(onDiskFile)) {
+			try (InputStream in = Files.newInputStream(onDiskFile)) {
 				int cnt;
 				final byte[] buf = new byte[Block.SZ];
 				while ((cnt = in.read(buf)) >= 0) {
@@ -514,9 +544,10 @@ public abstract class TemporaryBuffer extends OutputStream {
 
 		@Override
 		public InputStream openInputStream() throws IOException {
-			if (onDiskFile == null)
+			if (onDiskFile == null) {
 				return super.openInputStream();
-			return new FileInputStream(onDiskFile);
+                        }
+			return Files.newInputStream(onDiskFile);
 		}
 
 		@Override
@@ -524,7 +555,7 @@ public abstract class TemporaryBuffer extends OutputStream {
 			if (onDiskFile == null) {
 				return super.openInputStreamWithAutoDestroy();
 			}
-			return new FileInputStream(onDiskFile) {
+			return new FilterInputStream(Files.newInputStream(onDiskFile, StandardOpenOption.DELETE_ON_CLOSE)) {
 				@Override
 				public void close() throws IOException {
 					super.close();
@@ -539,9 +570,9 @@ public abstract class TemporaryBuffer extends OutputStream {
 
 			if (onDiskFile != null) {
 				try {
-					if (!onDiskFile.delete())
-						onDiskFile.deleteOnExit();
-				} finally {
+					Files.deleteIfExists(onDiskFile);
+				} catch (IOException ex) {
+                                } finally {
 					onDiskFile = null;
 				}
 			}

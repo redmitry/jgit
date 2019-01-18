@@ -45,6 +45,7 @@ package org.eclipse.jgit.internal.storage.dfs;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.internal.JGitText;
 import org.eclipse.jgit.lib.BaseRepositoryBuilder;
@@ -131,7 +132,7 @@ public abstract class DfsRepositoryBuilder<B extends DfsRepositoryBuilder, R ext
 	// We don't support local file IO and thus shouldn't permit these to set.
 
 	/** {@inheritDoc} */
-	@Override
+        @Override
 	public B setGitDir(File gitDir) {
 		if (gitDir != null)
 			throw new IllegalArgumentException();
@@ -140,7 +141,23 @@ public abstract class DfsRepositoryBuilder<B extends DfsRepositoryBuilder, R ext
 
 	/** {@inheritDoc} */
 	@Override
+	public B setGitDir(Path gitDir) {
+		if (gitDir != null)
+			throw new IllegalArgumentException();
+		return self();
+        }
+        
+	/** {@inheritDoc} */
+	@Override
 	public B setObjectDirectory(File objectDirectory) {
+		if (objectDirectory != null)
+			throw new IllegalArgumentException();
+		return self();
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public B setObjectDirectory(Path objectDirectory) {
 		if (objectDirectory != null)
 			throw new IllegalArgumentException();
 		return self();
@@ -152,6 +169,13 @@ public abstract class DfsRepositoryBuilder<B extends DfsRepositoryBuilder, R ext
 		throw new UnsupportedOperationException(
 				JGitText.get().unsupportedAlternates);
 	}
+        
+	/** {@inheritDoc} */
+	@Override
+	public B addAlternateObjectDirectory(Path other) {
+		throw new UnsupportedOperationException(
+				JGitText.get().unsupportedAlternates);
+	}
 
 	/** {@inheritDoc} */
 	@Override
@@ -160,10 +184,26 @@ public abstract class DfsRepositoryBuilder<B extends DfsRepositoryBuilder, R ext
 			throw new IllegalArgumentException();
 		return self();
 	}
+        
+	/** {@inheritDoc} */
+	@Override
+	public B setWorkTree(Path workTree) {
+		if (workTree != null)
+			throw new IllegalArgumentException();
+		return self();
+	}
 
 	/** {@inheritDoc} */
 	@Override
 	public B setIndexFile(File indexFile) {
+		if (indexFile != null)
+			throw new IllegalArgumentException();
+		return self();
+	}
+        
+	/** {@inheritDoc} */
+	@Override
+	public B setIndexFile(Path indexFile) {
 		if (indexFile != null)
 			throw new IllegalArgumentException();
 		return self();

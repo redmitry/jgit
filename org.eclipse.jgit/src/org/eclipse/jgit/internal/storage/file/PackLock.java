@@ -45,6 +45,7 @@ package org.eclipse.jgit.internal.storage.file;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.util.FS;
@@ -55,8 +56,20 @@ import org.eclipse.jgit.util.FileUtils;
  * associated <code>.keep</code> file.
  */
 public class PackLock {
-	private final File keepFile;
+	private final Path keepFile;
 
+	/**
+	 * @deprecated use {@link #PackLock(Path, FS)}
+	 *
+	 * @param packFile
+	 *            location of the <code>pack-*.pack</code> file.
+	 * @param fs
+	 *            the filesystem abstraction used by the repository.
+	 */
+	public PackLock(File packFile, FS fs) {
+		this(packFile.toPath(), fs);
+	}
+        
 	/**
 	 * Create a new lock for a pack file.
 	 *
@@ -65,10 +78,10 @@ public class PackLock {
 	 * @param fs
 	 *            the filesystem abstraction used by the repository.
 	 */
-	public PackLock(File packFile, FS fs) {
-		final File p = packFile.getParentFile();
-		final String n = packFile.getName();
-		keepFile = new File(p, n.substring(0, n.length() - 5) + ".keep"); //$NON-NLS-1$
+	public PackLock(Path packFile, FS fs) {
+		final Path p = packFile.getParent();
+		final String n = packFile.getFileName().toString();
+                keepFile = p.resolve(n.substring(0, n.length() - 5) + ".keep"); //$NON-NLS-1$
 	}
 
 	/**

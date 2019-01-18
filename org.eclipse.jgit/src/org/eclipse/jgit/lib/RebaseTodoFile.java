@@ -46,15 +46,16 @@ package org.eclipse.jgit.lib;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedList;
 import java.util.List;
 
 import org.eclipse.jgit.lib.RebaseTodoLine.Action;
-import org.eclipse.jgit.util.IO;
 import org.eclipse.jgit.util.RawParseUtils;
 
 /**
@@ -91,7 +92,10 @@ public class RebaseTodoFile {
 	 */
 	public List<RebaseTodoLine> readRebaseTodo(String path,
 			boolean includeComments) throws IOException {
-		byte[] buf = IO.readFully(new File(repo.getDirectory(), path));
+                final Path dir = repo.getDirectoryPath();
+                final Path file = dir != null ? dir.resolve(path) : Paths.get(path);
+		byte[] buf = Files.readAllBytes(file);
+                
 		int ptr = 0;
 		int tokenBegin = 0;
 		List<RebaseTodoLine> r = new LinkedList<>();
@@ -221,8 +225,13 @@ public class RebaseTodoFile {
 	 */
 	public void writeRebaseTodoFile(String path, List<RebaseTodoLine> steps,
 			boolean append) throws IOException {
-		try (OutputStream fw = new BufferedOutputStream(new FileOutputStream(
-				new File(repo.getDirectory(), path), append))) {
+                final Path dir = repo.getDirectoryPath();
+                final Path file = dir != null ? dir.resolve(path) : Paths.get(path);
+                
+		try (OutputStream fw = new BufferedOutputStream(
+                        Files.newOutputStream(file, append ? new StandardOpenOption[] 
+                                {StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND} 
+                                : new StandardOpenOption[] {StandardOpenOption.CREATE,StandardOpenOption.WRITE}))) {
 			StringBuilder sb = new StringBuilder();
 			for (RebaseTodoLine step : steps) {
 				sb.setLength(0);
