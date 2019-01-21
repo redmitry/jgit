@@ -383,7 +383,7 @@ public class RepositoryCache {
 		 * @see #lenient(File, FS)
 		 */
 		public static FileKey exact(File directory, FS fs) {
-			return exact(directory.toPath(), fs);
+			return exact(directory != null ? directory.toPath() : null, fs);
 		}
 
 		/**
@@ -416,7 +416,7 @@ public class RepositoryCache {
 		 * @see #exact(File, FS)
 		 */
 		public static FileKey lenient(File directory, FS fs) {
-			return lenient(directory.toPath(), fs);
+			return lenient(directory != null ? directory.toPath() : null, fs);
 		}
 
 		/**
@@ -511,7 +511,7 @@ public class RepositoryCache {
 		 *         Git directory.
 		 */
 		public static boolean isGitRepository(File dir, FS fs) {
-                        return isGitRepository(dir.toPath(), fs);
+                        return isGitRepository(dir != null ? dir.toPath() : null, fs);
 		}
 
 		/**
@@ -563,7 +563,7 @@ public class RepositoryCache {
 		 *         null if there is no suitable match.
 		 */
 		public static File resolve(File directory, FS fs) {
-                        return resolve(directory.toPath(), fs).toFile();
+                        return resolve(directory != null ? directory.toPath() : null, fs).toFile();
 		}
                 
 		/**

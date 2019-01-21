@@ -73,7 +73,7 @@ public class LazyObjectIdSetFile implements ObjectIdSet {
 	 *            the source file.
 	 */
 	public LazyObjectIdSetFile(File src) {
-		this(src.toPath());
+		this(src != null ? src.toPath() : null);
 	}
         
 	/**

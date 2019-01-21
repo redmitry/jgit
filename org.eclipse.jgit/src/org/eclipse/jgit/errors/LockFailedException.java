@@ -70,7 +70,7 @@ public class LockFailedException extends IOException {
 	 * @since 4.1
 	 */
 	public LockFailedException(File file, String message, Throwable cause) {
-                this(file.toPath(), message, cause);
+                this(file != null ? file.toPath() : null, message, cause);
 	}
 
 	/**
@@ -99,7 +99,7 @@ public class LockFailedException extends IOException {
 	 *            exception message
 	 */
 	public LockFailedException(File file, String message) {
-		this(file.toPath(), message);
+		this(file != null ? file.toPath() : null, message);
 	}
 
 	/**
@@ -122,7 +122,7 @@ public class LockFailedException extends IOException {
 	 *            file that could not be locked
 	 */
 	public LockFailedException(File file) {
-		this(file.toPath());
+		this(file != null ? file.toPath() : null);
 	}
 
 	/**

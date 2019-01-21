@@ -1548,7 +1548,8 @@ public abstract class Repository implements AutoCloseable {
 	 */
 	@NonNull
 	public static String stripWorkDir(File workDir, File file) {
-            return stripWorkDir(workDir.toPath(), file.toPath());
+            return stripWorkDir(workDir != null ? workDir.toPath() : null, 
+                    file != null ? file.toPath() : null);
         }
         
 	/**

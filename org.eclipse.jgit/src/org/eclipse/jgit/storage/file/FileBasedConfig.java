@@ -129,7 +129,7 @@ public class FileBasedConfig extends StoredConfig {
 	 *            certain file system operations.
 	 */
 	public FileBasedConfig(Config base, File cfgLocation, FS fs) {
-                this(base, cfgLocation.toPath(), fs);
+                this(base, cfgLocation != null ? cfgLocation.toPath() : null, fs);
 	}
 
 	/**

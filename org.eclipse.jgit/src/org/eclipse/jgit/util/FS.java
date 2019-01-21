@@ -355,7 +355,7 @@ public abstract class FS {
 	 * @since 3.0
 	 */
 	public long lastModified(File f) throws IOException {
-		return lastModified(f.toPath());
+		return lastModified(f != null ? f.toPath() : null);
 	}
 
 	/**
@@ -543,7 +543,7 @@ public abstract class FS {
 	 * @return {@code this}.
 	 */
 	public FS setUserHome(File path) {
-                return setUserHome(path.toPath());
+                return setUserHome(path != null ? path.toPath() : null);
 	}
         
 	/**
@@ -878,7 +878,7 @@ public abstract class FS {
 	 * @since 4.0
 	 */
 	public FS setGitSystemConfig(File configFile) {
-		return setGitSystemConfig(configFile.toPath());
+		return setGitSystemConfig(configFile != null ? configFile.toPath() : null);
 	}
 
 	/**
@@ -973,7 +973,7 @@ public abstract class FS {
 	 * @since 3.0
 	 */
 	public boolean exists(File path) {
-		return exists(path.toPath());
+		return exists(path != null ? path.toPath() : null);
 	}
 
 	/**
@@ -1079,7 +1079,7 @@ public abstract class FS {
 	 * @since 3.0
 	 */
 	public void setHidden(File path, boolean hidden) throws IOException {
-		setHidden(path.toPath(), hidden);
+		setHidden(path != null ? path.toPath() : null, hidden);
 	}
 
 	/**
@@ -1205,7 +1205,7 @@ public abstract class FS {
 	 * @since 4.7
 	 */
 	public LockToken createNewFileAtomic(File path) throws IOException {
-                return createNewFileAtomic(path.toPath());
+                return createNewFileAtomic(path != null ? path.toPath() : null);
 	}
 
 	/**
@@ -1780,7 +1780,7 @@ public abstract class FS {
 		 * @param path
 		 */
 		public Attributes(File path, FS fs) {
-			this(fs, path.toPath(), false, false, false, false, false, 0L, 0L, 0L);
+			this(fs, path != null ? path.toPath() : null, false, false, false, false, false, 0L, 0L, 0L);
 		}
 
 		/**
@@ -1842,7 +1842,7 @@ public abstract class FS {
 	 * @since 3.3
 	 */
 	public Attributes getAttributes(File path) {
-               return getAttributes(path.toPath());
+               return getAttributes(path != null ? path.toPath() : null);
 	}
         
 	/**

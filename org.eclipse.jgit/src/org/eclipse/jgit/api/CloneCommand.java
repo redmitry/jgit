@@ -480,7 +480,7 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	 *             directory and gitDir are specified
 	 */
 	public CloneCommand setDirectory(File directory) {
-                return setDirectory(directory.toPath());
+                return setDirectory(directory != null ? directory.toPath() : null);
 	}
 
 	/**
@@ -518,7 +518,7 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	 *             directory and gitDir are specified
 	 */
 	public CloneCommand setGitDir(File gitDir) {
-                return setGitDir(gitDir.toPath());
+                return setGitDir(gitDir != null ? gitDir.toPath() : null);
 	}
         
 	/**

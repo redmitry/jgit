@@ -137,7 +137,7 @@ class TransportBundleFile extends Transport implements TransportBundle {
 	 *            transport bundle path
 	 */
 	public TransportBundleFile(URIish uri, File bundlePath) {
-		this(uri, bundlePath.toPath());
+		this(uri, bundlePath != null ? bundlePath.toPath() : null);
 	}
 
 	/**

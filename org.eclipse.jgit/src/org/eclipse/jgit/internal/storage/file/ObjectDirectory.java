@@ -169,9 +169,9 @@ public class ObjectDirectory extends FileObjectDatabase {
 	 */
 	public ObjectDirectory(final Config cfg, final File dir,
 			File[] alternatePaths, FS fs, File shallowFile) throws IOException {
-                this(cfg, dir.toPath(), 
+                this(cfg, dir != null ? dir.toPath() : null, 
                      Arrays.stream(alternatePaths).map(x -> x.toPath()).toArray(Path[]::new),
-                     fs, shallowFile.toPath());
+                     fs, shallowFile != null ? shallowFile.toPath() : null);
 
 	}
         
@@ -338,7 +338,7 @@ public class ObjectDirectory extends FileObjectDatabase {
          * @throws java.io.IOException
 	 */
 	public PackFile openPack(File pack) throws IOException {
-                return openPack(pack.toPath());
+                return openPack(pack != null ? pack.toPath() : null);
 	}
 
 	/**

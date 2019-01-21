@@ -92,7 +92,7 @@ public abstract class PackBitmapIndex {
 	public static PackBitmapIndex open(
 			File idxFile, PackIndex packIndex, PackReverseIndex reverseIndex)
 			throws IOException {
-                return open(idxFile.toPath(), packIndex, reverseIndex);
+                return open(idxFile != null ? idxFile.toPath() : null, packIndex, reverseIndex);
 	}
 
 	/**

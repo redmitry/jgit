@@ -173,7 +173,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 	 */
 	public FileTreeIterator(final File root, FS fs, WorkingTreeOptions options,
 							FileModeStrategy fileModeStrategy) {
-                this(root.toPath(), fs, options, fileModeStrategy);
+                this(root != null ? root.toPath() : null, fs, options, fileModeStrategy);
 	}
 
 	/**
@@ -308,7 +308,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 		 *         directory, a gitlink, etc.
 		 */
 		public FileMode getMode(File f, FS.Attributes attributes) {
-                       return getMode(f.toPath(), attributes);
+                       return getMode(f != null ? f.toPath() : null, attributes);
 		}
                 
 		@Override
@@ -355,7 +355,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 		 *         directory, a gitlink, etc.
 		 */
 		public FileMode getMode(File f, FS.Attributes attributes) {
-                        return getMode(f.toPath(), attributes);
+                        return getMode(f != null ? f.toPath() : null, attributes);
 		}
                 
 		@Override
@@ -392,7 +392,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 		 *            file system
 		 */
 		public FileEntry(File f, FS fs) {
-			this(f.toPath(), fs);
+			this(f != null ? f.toPath() : null, fs);
 		}
 
 		/**
@@ -421,7 +421,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 		 * @since 4.3
 		 */
 		public FileEntry(File f, FS fs, FileModeStrategy fileModeStrategy) {
-			this(f.toPath(), fs, fileModeStrategy);
+			this(f != null ? f.toPath() : null, fs, fileModeStrategy);
 		}
 
 		/**
@@ -461,7 +461,7 @@ public class FileTreeIterator extends WorkingTreeIterator {
 		 */
 		public FileEntry(File f, FS fs, FS.Attributes attributes,
 				FileModeStrategy fileModeStrategy) {
-                        this(f.toPath(), fs, attributes, fileModeStrategy);
+                        this(f != null ? f.toPath() : null, fs, attributes, fileModeStrategy);
 		}
 
 		/**

@@ -248,7 +248,7 @@ public class FS_POSIX extends FS {
 	/** {@inheritDoc} */
 	@Override
 	public boolean setExecute(File f, boolean canExecute) {
-                return setExecute(f.toPath(), canExecute);
+                return setExecute(f != null ? f.toPath() : null, canExecute);
 	}
 
 	/** {@inheritDoc} */
@@ -472,7 +472,7 @@ public class FS_POSIX extends FS {
 	 */
         @Override
 	public LockToken createNewFileAtomic(File file) throws IOException {
-            return createNewFileAtomic(file.toPath());
+            return createNewFileAtomic(file != null ? file.toPath() : null);
 	}
 
 	/**

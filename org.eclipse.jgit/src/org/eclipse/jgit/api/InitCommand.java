@@ -143,7 +143,7 @@ public class InitCommand implements Callable<Git> {
 	 */
 	public InitCommand setDirectory(File directory)
 			throws IllegalStateException {
-                return setDirectory(directory.toPath());
+                return setDirectory(directory != null ? directory.toPath() : null);
 	}
 
 	/**

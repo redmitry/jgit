@@ -62,7 +62,7 @@ public class RepositoryNotFoundException extends TransportException {
 	 *            description of the repository not found, usually file path.
 	 */
 	public RepositoryNotFoundException(File location) {
-		this(location.toPath());
+		this(location != null ? location.toPath() : null);
 	}
 
 	/**

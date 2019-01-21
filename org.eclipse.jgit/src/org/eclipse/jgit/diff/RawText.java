@@ -123,7 +123,7 @@ public class RawText extends Sequence {
 	 *             if Exceptions occur while reading the file
 	 */
 	public RawText(File file) throws IOException {
-		this(file.toPath());
+		this(file != null ? file.toPath() : null);
 	}
 
 	/**

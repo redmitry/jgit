@@ -215,7 +215,7 @@ public class DirCache {
 	 */
 	public static DirCache read(File indexLocation, FS fs)
 			throws CorruptObjectException, IOException {
-                        return read(indexLocation.toPath(), fs);
+                        return read(indexLocation != null ? indexLocation.toPath() : null, fs);
 	}
 
 	/**
@@ -264,7 +264,7 @@ public class DirCache {
 	 */
 	public static DirCache lock(File indexLocation, FS fs)
 			throws CorruptObjectException, IOException {
-                return lock(indexLocation.toPath(), fs);
+                return lock(indexLocation != null ? indexLocation.toPath() : null, fs);
 	}
         
 	/**
@@ -365,7 +365,7 @@ public class DirCache {
 			IndexChangedListener indexChangedListener)
 			throws CorruptObjectException,
 			IOException {
-                return lock(indexLocation.toPath(), fs, indexChangedListener);
+                return lock(indexLocation != null ? indexLocation.toPath() : null, fs, indexChangedListener);
 	}
         
 	/**
@@ -441,7 +441,7 @@ public class DirCache {
 	 *            certain file system operations.
 	 */
 	public DirCache(File indexLocation, FS fs) {
-                this(indexLocation.toPath(), fs);
+                this(indexLocation != null ? indexLocation.toPath() : null, fs);
 	}
 
 	/**

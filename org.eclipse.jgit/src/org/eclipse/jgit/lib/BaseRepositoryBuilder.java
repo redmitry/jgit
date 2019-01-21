@@ -179,7 +179,7 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	 * @return {@code this} (for chaining calls).
 	 */
 	public B setGitDir(File gitDir) {
-               return setGitDir(gitDir.toPath());
+               return setGitDir(gitDir != null ? gitDir.toPath() : null);
 	}
         
 	/**
@@ -226,7 +226,8 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	 * @return {@code this} (for chaining calls).
 	 */
 	public B setObjectDirectory(File objectDirectory) {
-		return setObjectDirectory(objectDirectory.toPath());
+		return setObjectDirectory(
+                        objectDirectory != null ? objectDirectory.toPath() : null);
 	}
 
 	/**
@@ -436,7 +437,7 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	 * @return {@code this} (for chaining calls).
 	 */
 	public B setWorkTree(File workTree) {
-                return setWorkTree(workTree.toPath());
+                return setWorkTree(workTree != null ? workTree.toPath() : null);
 	}
         
 	/**
@@ -477,7 +478,7 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	 * @return {@code this} (for chaining calls).
 	 */
 	public B setIndexFile(File indexFile) {
-		return setIndexFile(indexFile.toPath());
+		return setIndexFile(indexFile != null ? indexFile.toPath(): null);
 	}
 
 	/**
@@ -711,7 +712,7 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	 * @return {@code this} (for chaining calls).
 	 */
         public B findGitDir(File current) {
-            return findGitDir(current.toPath());
+            return findGitDir(current != null ? current.toPath() : null);
         }
 
 	/**

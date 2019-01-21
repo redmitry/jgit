@@ -91,7 +91,7 @@ public class LockFile {
 	 * @return true if unlocked, false if unlocking failed
 	 */
 	public static boolean unlock(File file) {
-            return unlock(file.toPath());
+            return unlock(file != null ? file.toPath() : null);
 	}
 
 	/**
@@ -152,7 +152,7 @@ public class LockFile {
 	 *            the file that will be locked.
 	 */
 	public LockFile(File f) {
-                this(f.toPath());
+                this(f != null ? f.toPath() : null);
 	}
 
 	/**

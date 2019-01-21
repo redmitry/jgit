@@ -106,7 +106,7 @@ public class FileSnapshot {
 	 * @return the snapshot.
 	 */
 	public static FileSnapshot save(File path) {
-                return FileSnapshot.save(path.toPath());
+                return FileSnapshot.save(path != null ? path.toPath() : null);
 	}
 
 	/**

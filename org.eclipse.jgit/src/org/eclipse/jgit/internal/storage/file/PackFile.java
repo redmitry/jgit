@@ -165,7 +165,7 @@ public class PackFile implements Iterable<PackIndex.MutableEntry> {
 	 *            additional pack file extensions with the same base as the pack
 	 */
 	public PackFile(File packFile, int extensions) {
-		this(packFile.toPath(), extensions);
+		this(packFile != null ? packFile.toPath() : null, extensions);
 	}
 
 	/**

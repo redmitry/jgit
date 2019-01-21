@@ -148,7 +148,7 @@ public class FileRepository extends Repository {
 	 * @see FileRepositoryBuilder
 	 */
 	public FileRepository(File gitDir) throws IOException {
-		this(gitDir.toPath());
+		this(gitDir != null ? gitDir.toPath() : null);
 	}
 
 	/**
@@ -572,7 +572,7 @@ public class FileRepository extends Repository {
 	 *             a Git pack file index.
 	 */
 	public void openPack(File pack) throws IOException {
-		openPack(pack.toPath());
+		openPack(pack != null ? pack.toPath() : null);
 	}
 
 	/**

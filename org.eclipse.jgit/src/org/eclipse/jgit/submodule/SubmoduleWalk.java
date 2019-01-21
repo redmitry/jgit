@@ -289,7 +289,7 @@ public class SubmoduleWalk implements AutoCloseable {
 	 */
 	public static Repository getSubmoduleRepository(final File parent,
 			final String path, FS fs) throws IOException {
-                return getSubmoduleRepository(parent.toPath(), path, fs);
+                return getSubmoduleRepository(parent != null ? parent.toPath() : null, path, fs);
 	}
 
 	/**

@@ -130,7 +130,7 @@ public class Git implements AutoCloseable {
 	 * @throws java.io.IOException
 	 */
 	public static Git open(File dir, FS fs) throws IOException {
-		return open(dir.toPath(), fs);
+		return open(dir != null ? dir.toPath() : null, fs);
 	}
 
 	/**

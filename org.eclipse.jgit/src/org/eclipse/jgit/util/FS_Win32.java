@@ -144,7 +144,7 @@ public class FS_Win32 extends FS {
 	/** {@inheritDoc} */
 	@Override
 	public Entry[] list(File directory, FileModeStrategy fileModeStrategy) {
-                return list(directory.toPath(), fileModeStrategy);
+                return list(directory != null ? directory.toPath() : null, fileModeStrategy);
 	}
 
 	/** {@inheritDoc} */
@@ -283,7 +283,7 @@ public class FS_Win32 extends FS {
 	/** {@inheritDoc} */
 	@Override
 	public Attributes getAttributes(File path) {
-		return FileUtils.getFileAttributesBasic(this, path.toPath());
+		return FileUtils.getFileAttributesBasic(this, path != null ? path.toPath() : null);
 	}
         
 	/** {@inheritDoc} */

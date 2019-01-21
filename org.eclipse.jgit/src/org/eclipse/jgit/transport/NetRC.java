@@ -163,7 +163,7 @@ public class NetRC {
 	 *            the .netrc file
 	 */
 	public NetRC(File netrc) {
-		this(netrc.toPath());
+		this(netrc != null ? netrc.toPath() : null);
 	}
 
 	/**

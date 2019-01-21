@@ -67,7 +67,7 @@ public class PackLock {
 	 *            the filesystem abstraction used by the repository.
 	 */
 	public PackLock(File packFile, FS fs) {
-		this(packFile.toPath(), fs);
+		this(packFile != null ? packFile.toPath() : null, fs);
 	}
         
 	/**

@@ -91,7 +91,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	 *            {@code git-daemon-export-ok} files.
 	 */
 	public FileResolver(File basePath, boolean exportAll) {
-		this(basePath.toPath(), exportAll);
+		this(basePath != null ? basePath.toPath() : null, exportAll);
 	}
 
 	/**
@@ -219,7 +219,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	 *            named <code>git-daemon-export-ok</code> will be published.
 	 */
 	public void exportDirectory(File dir) {
-		exportDirectory(dir.toPath());
+		exportDirectory(dir != null ? dir.toPath() : null);
 	}
 
 	/**
