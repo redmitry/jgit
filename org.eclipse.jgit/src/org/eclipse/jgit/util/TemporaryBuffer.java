@@ -436,6 +436,15 @@ public abstract class TemporaryBuffer extends OutputStream {
 		private Path onDiskFile;
 
 		/**
+		 * Create a new temporary buffer, limiting memory usage.
+		 *
+		 */
+                public LocalFile() {
+                    super(DEFAULT_IN_CORE_LIMIT);
+                    directory = null;
+                }
+
+		/**
 		 * @deprecated use {@link #LocalFile(Path)}
 		 *
 		 * @param directory
