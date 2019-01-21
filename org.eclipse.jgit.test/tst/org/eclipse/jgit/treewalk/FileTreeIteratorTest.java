@@ -51,6 +51,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 
 import org.eclipse.jgit.api.Git;
@@ -583,7 +584,7 @@ public class FileTreeIteratorTest extends RepositoryTestCase {
 	private final FileTreeIterator.FileModeStrategy NO_GITLINKS_STRATEGY =
 			new FileTreeIterator.FileModeStrategy() {
 				@Override
-				public FileMode getMode(File f, FS.Attributes attributes) {
+				public FileMode getMode(Path f, FS.Attributes attributes) {
 					if (attributes.isSymbolicLink()) {
 						return FileMode.SYMLINK;
 					} else if (attributes.isDirectory()) {

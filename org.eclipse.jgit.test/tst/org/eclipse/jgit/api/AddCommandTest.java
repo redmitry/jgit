@@ -53,6 +53,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Path;
 import java.util.Set;
 
 import org.eclipse.jgit.api.errors.FilterFailedException;
@@ -1094,7 +1095,7 @@ public class AddCommandTest extends RepositoryTestCase {
 			}
 
 			@Override
-			public boolean setExecute(File f, boolean canExec) {
+			public boolean setExecute(Path f, boolean canExec) {
 				return true;
 			}
 
@@ -1114,14 +1115,14 @@ public class AddCommandTest extends RepositoryTestCase {
 			}
 
 			@Override
-			protected File discoverGitExe() {
+			protected Path discoverGitExe() {
 				return null;
 			}
 
 			@Override
-			public boolean canExecute(File f) {
+			public boolean canExecute(Path f) {
 				try {
-					return read(f).startsWith("binary:");
+					return read(f.toFile()).startsWith("binary:");
 				} catch (IOException e) {
 					return false;
 				}
