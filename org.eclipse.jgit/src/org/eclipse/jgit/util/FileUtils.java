@@ -134,14 +134,14 @@ public class FileUtils {
 	 */
 	public static Path toPath(File f) throws IOException {
 		try {
-			return f.toPath();
+			return f != null ? f.toPath() : null;
 		} catch (InvalidPathException ex) {
 			throw new IOException(ex);
 		}
 	}
 
 	/**
-	 * Delete file or empty folder
+	 * @deprecated use {@link #delete(Path)}
 	 *
 	 * @param f
 	 *            {@code File} to be deleted
@@ -152,7 +152,7 @@ public class FileUtils {
 	 *             multiple concurrent threads all try to delete the same file.
 	 */
 	public static void delete(File f) throws IOException {
-		delete(f.toPath());
+		delete(toPath(f));
 	}
 
 	/**
@@ -171,7 +171,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Delete file or folder
+	 * @deprecated use {@link #delete(Path, int)}
 	 *
 	 * @param f
 	 *            {@code File} to be deleted
@@ -273,17 +273,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Rename a file or folder. If the rename fails and if we are running on a
-	 * filesystem where it makes sense to repeat a failing rename then repeat
-	 * the rename operation up to 9 times with 100ms sleep time between two
-	 * calls. Furthermore if the destination exists and is directory hierarchy
-	 * with only directories in it, the whole directory hierarchy will be
-	 * deleted. If the target represents a non-empty directory structure, empty
-	 * subdirectories within that structure may or may not be deleted even if
-	 * the method fails. Furthermore if the destination exists and is a file
-	 * then the file will be deleted and then the rename is retried.
-	 * <p>
-	 * This operation is <em>not</em> atomic.
+	 * @deprecated use {@link #rename(Path, Path)}
 	 *
 	 * @see FS#retryFailedLockFileCommit()
 	 * @param src
@@ -311,7 +301,8 @@ public class FileUtils {
 	 * then the file will be deleted and then the rename is retried.
 	 * <p>
 	 * This operation is <em>not</em> atomic.
-	 *
+	 * </p>
+         * 
 	 * @see FS#retryFailedLockFileCommit()
 	 * @param src
 	 *            the old {@code File}
@@ -327,20 +318,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Rename a file or folder using the passed
-	 * {@link java.nio.file.CopyOption}s. If the rename fails and if we are
-	 * running on a filesystem where it makes sense to repeat a failing rename
-	 * then repeat the rename operation up to 9 times with 100ms sleep time
-	 * between two calls. Furthermore if the destination exists and is a
-	 * directory hierarchy with only directories in it, the whole directory
-	 * hierarchy will be deleted. If the target represents a non-empty directory
-	 * structure, empty subdirectories within that structure may or may not be
-	 * deleted even if the method fails. Furthermore if the destination exists
-	 * and is a file then the file will be replaced if
-	 * {@link java.nio.file.StandardCopyOption#REPLACE_EXISTING} has been set.
-	 * If {@link java.nio.file.StandardCopyOption#ATOMIC_MOVE} has been set the
-	 * rename will be done atomically or fail with an
-	 * {@link java.nio.file.AtomicMoveNotSupportedException}
+	 * @deprecated use {@link #rename(Path, Path, CopyOption...)}
 	 *
 	 * @param src
 	 *            the old file
@@ -357,6 +335,7 @@ public class FileUtils {
 	public static void rename(final File src, final File dst,
 			CopyOption... options)
 					throws AtomicMoveNotSupportedException, IOException {
+            rename(toPath(src), toPath(dst), options);
 	}
 
 	/**
@@ -425,7 +404,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Creates the directory named by this abstract pathname.
+	 * @deprecated use {@link #mkdir(Path)}
 	 *
 	 * @param d
 	 *            directory to be created
@@ -438,11 +417,28 @@ public class FileUtils {
 	 */
 	public static void mkdir(File d)
 			throws IOException {
-		mkdir(d, false);
+		mkdir(toPath(d));
 	}
 
 	/**
 	 * Creates the directory named by this abstract pathname.
+	 *
+	 * @param d
+	 *            directory to be created
+	 * @throws java.io.IOException
+	 *             if creation of {@code d} fails. This may occur if {@code d}
+	 *             did exist when the method was called. This can therefore
+	 *             cause java.io.IOExceptions during race conditions when
+	 *             multiple concurrent threads all try to create the same
+	 *             directory.
+	 */
+	public static void mkdir(Path d)
+			throws IOException {
+		mkdir(d, false);
+	}
+
+	/**
+	 * @deprecated use {@link #mkdir(Path, boolean)}
 	 *
 	 * @param d
 	 *            directory to be created
@@ -489,10 +485,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Creates the directory named by this abstract pathname, including any
-	 * necessary but nonexistent parent directories. Note that if this operation
-	 * fails it may have succeeded in creating some of the necessary parent
-	 * directories.
+         * @deprecated use {@link #mkdirs(Path)}
 	 *
 	 * @param d
 	 *            directory to be created
@@ -527,10 +520,7 @@ public class FileUtils {
 	}
         
 	/**
-	 * Creates the directory named by this abstract pathname, including any
-	 * necessary but nonexistent parent directories. Note that if this operation
-	 * fails it may have succeeded in creating some of the necessary parent
-	 * directories.
+	 * @deprecated use {@link #mkdirs(Path, boolean)}
 	 *
 	 * @param d
 	 *            directory to be created
@@ -580,15 +570,7 @@ public class FileUtils {
 	}
         
 	/**
-	 * Atomically creates a new, empty file named by this abstract pathname if
-	 * and only if a file with this name does not yet exist. The check for the
-	 * existence of the file and the creation of the file if it does not exist
-	 * are a single operation that is atomic with respect to all other
-	 * filesystem activities that might affect the file.
-	 * <p>
-	 * Note: this method should not be used for file-locking, as the resulting
-	 * protocol cannot be made to work reliably. The
-	 * {@link java.nio.channels.FileLock} facility should be used instead.
+	 * @deprecated use {@link #createNewFile(Path)}
 	 *
 	 * @param f
 	 *            the file to be created
@@ -625,7 +607,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Create a symbolic link
+	 * @deprecated use {@link #createSymLink(Path, String)}
 	 *
 	 * @param path
 	 *            the path of the symbolic link to create
@@ -703,7 +685,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Create a temporary directory.
+	 * @deprecated use {@link #createTempDir(String, String, Path)}
 	 *
 	 * @param prefix
 	 *            prefix string
@@ -717,16 +699,7 @@ public class FileUtils {
 	 */
 	public static File createTempDir(String prefix, String suffix, File dir)
 			throws IOException {
-		final int RETRIES = 1; // When something bad happens, retry once.
-		for (int i = 0; i < RETRIES; i++) {
-			File tmp = File.createTempFile(prefix, suffix, dir);
-			if (!tmp.delete())
-				continue;
-			if (!tmp.mkdir())
-				continue;
-			return tmp;
-		}
-		throw new IOException(JGitText.get().cannotCreateTempDir);
+                return createTempDir(prefix, suffix, toPath(dir)).toFile();
 	}
 
 	/**
@@ -899,11 +872,13 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #isSymlink(Path)}
+         * 
 	 * @param file
 	 * @return {@code true} if the passed file is a symbolic link
 	 */
 	static boolean isSymlink(File file) {
-		return isSymlink(file.toPath());
+		return isSymlink(file != null ? file.toPath() : null);
 	}
 
 	/**
@@ -915,14 +890,15 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #lastModified(Path)}
+         * 
 	 * @param file
 	 * @return lastModified attribute for given file, not following symbolic
 	 *         links
 	 * @throws IOException
 	 */
 	public static long lastModified(File file) throws IOException {
-		return Files.getLastModifiedTime(toPath(file), LinkOption.NOFOLLOW_LINKS)
-				.toMillis();
+		return lastModified(toPath(file));
 	}
         
 	/**
@@ -937,12 +913,14 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #setLastModified(Path, long)}
+         * 
 	 * @param file
 	 * @param time
 	 * @throws IOException
 	 */
 	static void setLastModified(File file, long time) throws IOException {
-		Files.setLastModifiedTime(toPath(file), FileTime.fromMillis(time));
+		setLastModified(toPath(file), time);
 	}
 
 	/**
@@ -956,12 +934,25 @@ public class FileUtils {
 
         
 	/**
+         * @deprecated use {@link #exists(Path)}
+         * 
 	 * @param file
 	 * @return {@code true} if the given file exists, not following symbolic
 	 *         links
 	 */
 	static boolean exists(File file) {
-		return Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS);
+		return exists(file != null ? file.toPath() : null);
+	}
+
+	/**
+         * @deprecated use {@link #exists(Path)}
+         * 
+	 * @param file
+	 * @return {@code true} if the given file exists, not following symbolic
+	 *         links
+	 */
+	static boolean exists(Path file) {
+		return Files.exists(file, LinkOption.NOFOLLOW_LINKS);
 	}
 
 	/**
@@ -985,7 +976,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Set a file hidden (on Windows)
+	 * @deprecated use {@link #setHidden(Path, boolean)}
 	 *
 	 * @param file
 	 *            a {@link java.io.File} object.
@@ -995,7 +986,7 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static void setHidden(File file, boolean hidden) throws IOException {
-                FileUtils.setHidden(FileUtils.toPath(file), hidden);
+                setHidden(toPath(file), hidden);
 	}
 
 	/**
@@ -1158,6 +1149,8 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #isDirectory(Path)}
+         * 
 	 * @param file
 	 * @return {@code true} if the given file is a directory, not following
 	 *         symbolic links
@@ -1176,12 +1169,14 @@ public class FileUtils {
 	}
 
 	/**
+         * @deprecated use {@link #isFile(Path)}
+         * 
 	 * @param file
 	 * @return {@code true} if the given file is a file, not following symbolic
 	 *         links
 	 */
 	static boolean isFile(File file) {
-		return isFile(file.toPath());
+		return isFile(file != null ? file.toPath() : null);
 	}
 
 	/**
@@ -1194,7 +1189,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Whether the given file can be executed.
+	 * @deprecated use {@link #canExecute(Path)}
 	 *
 	 * @param file
 	 *            a {@link java.io.File} object.
@@ -1202,7 +1197,7 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static boolean canExecute(File file) {
-            return FileUtils.canExecute(file.toPath());
+            return canExecute(file.toPath());
 	}
 
 	/**
@@ -1251,7 +1246,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * Get file system attributes for the given file.
+	 * @deprecated use {@link #getFileAttributesPosix(FS, Path)}
 	 *
 	 * @param fs
 	 *            a {@link org.eclipse.jgit.util.FS} object.
@@ -1261,7 +1256,7 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static Attributes getFileAttributesPosix(FS fs, File file) {
-                return getFileAttributesPosix(fs, file.toPath());
+                return getFileAttributesPosix(fs, file != null ? file.toPath() : null);
 	}
 
 	/**
@@ -1301,7 +1296,7 @@ public class FileUtils {
 	}
 
 	/**
-	 * NFC normalize a file (on Mac), otherwise do nothing
+	 * @deprecated use {@link #normalize(Path)}
 	 *
 	 * @param file
 	 *            a {@link java.io.File}.
@@ -1310,12 +1305,25 @@ public class FileUtils {
 	 * @since 4.1
 	 */
 	public static File normalize(File file) {
+                return normalize(file != null ? file.toPath() : null).toFile();
+	}
+        
+	/**
+	 * NFC normalize a file (on Mac), otherwise do nothing
+	 *
+	 * @param file
+	 *            a {@link java.io.File}.
+	 * @return on Mac: NFC normalized {@link java.io.File}, otherwise the passed
+	 *         file
+	 * @since 4.1
+	 */
+	public static Path normalize(Path file) {
 		if (SystemReader.getInstance().isMacOS()) {
 			// TODO: Would it be faster to check with isNormalized first
 			// assuming normalized paths are much more common
-			String normalized = Normalizer.normalize(file.getPath(),
+			String normalized = Normalizer.normalize(file.toString(),
 					Normalizer.Form.NFC);
-			return new File(normalized);
+			return java.nio.file.Paths.get(normalized);
 		}
 		return file;
 	}
