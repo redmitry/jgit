@@ -1086,34 +1086,10 @@ public class FileUtils {
                                 posix.setPermissions(permissions);
 
                         } else {
-                                AclFileAttributeView acl = Files.getFileAttributeView(file, 
-                                        AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-                                if (acl != null) {
-                                        final UserPrincipal user = Files.getOwner(file);
-                                        final List<AclEntry> list = acl.getAcl();
-                                        if (readonly) {
-                                                for (int i = 0; i < list.size(); i++) {
-                                                    final AclEntry entry = list.get(i);
-                                                    if (AclEntryType.ALLOW == entry.type() &&
-                                                            entry.permissions().contains(AclEntryPermission.WRITE_DATA)) {
-                                                        list.set(i, AclEntry.newBuilder(entry).setType(AclEntryType.DENY).build());
-                                                    }
-                                                }
-                                        } else {
-                                                final AclEntry entry = AclEntry.newBuilder()
-                                                                .setType(AclEntryType.ALLOW)
-                                                                .setPrincipal(user)
-                                                                .setPermissions(AclEntryPermission.WRITE_DATA)
-                                                                .build();
-                                                list.add(entry);
-                                        }
-                                        acl.setAcl(list);
-                                } else {
-                                        DosFileAttributeView dos = Files.getFileAttributeView(file, 
-                                                DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-                                        if (dos != null) {
-                                            dos.setReadOnly(readonly);
-                                        }
+                                DosFileAttributeView dos = Files.getFileAttributeView(file, 
+                                        DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+                                if (dos != null) {
+                                    dos.setReadOnly(readonly);
                                 }
                         }
                 }

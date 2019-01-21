@@ -1772,7 +1772,8 @@ public abstract class Repository implements AutoCloseable {
 	 * @throws java.io.IOException
 	 */
 	public void writeMergeCommitMsg(String msg) throws IOException {
-                Path mergeMsgFile = Paths.get(gitDir.toString(), Constants.MERGE_MSG);
+                Path mergeMsgFile = gitDir != null ? gitDir.resolve(Constants.MERGE_MSG)
+                        : Paths.get(Constants.MERGE_MSG);
 		writeCommitMsg(mergeMsgFile, msg);
 	}
 
@@ -1806,7 +1807,8 @@ public abstract class Repository implements AutoCloseable {
 	 * @since 4.0
 	 */
 	public void writeCommitEditMsg(String msg) throws IOException {
-                Path commiEditMsgFile = Paths.get(gitDir.toString(), Constants.COMMIT_EDITMSG);
+                Path commiEditMsgFile = gitDir != null ? gitDir.resolve(Constants.COMMIT_EDITMSG) 
+                        : Paths.get(Constants.COMMIT_EDITMSG);
 		writeCommitMsg(commiEditMsgFile, msg);
 	}
 

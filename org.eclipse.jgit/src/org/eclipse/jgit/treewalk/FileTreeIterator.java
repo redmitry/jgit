@@ -202,6 +202,62 @@ public class FileTreeIterator extends WorkingTreeIterator {
 	}
 
 	/**
+	 * @deprecated use {@link #FileTreeIterator(FileTreeIterator, Path, FS)}
+	 *
+	 * @param p
+	 *            the parent iterator we were created from.
+	 * @param root
+	 *            the subdirectory. This should be a directory contained within
+	 *            the parent directory.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @since 4.3
+	 */
+	protected FileTreeIterator(final FileTreeIterator p, final File root,
+			FS fs) {
+		this(p, root != null ? root.toPath() : null, fs, p.fileModeStrategy);
+	}
+
+	/**
+	 * Create a new iterator to traverse a subdirectory.
+	 *
+	 * @param p
+	 *            the parent iterator we were created from.
+	 * @param root
+	 *            the subdirectory. This should be a directory contained within
+	 *            the parent directory.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @since 4.3
+	 */
+	protected FileTreeIterator(final FileTreeIterator p, final Path root,
+			FS fs) {
+		this(p, root, fs, p.fileModeStrategy);
+	}
+	/**
+	 * @deprecated use {@link #FileTreeIterator(WorkingTreeIterator, Path, FS, FileModeStrategy)}
+	 *
+	 * @param p
+	 *            the parent iterator we were created from.
+	 * @param root
+	 *            the subdirectory. This should be a directory contained within
+	 *            the parent directory
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @param fileModeStrategy
+	 *            the strategy to use to determine the FileMode for a given
+	 *            FileEntry.
+	 * @since 4.3
+	 */
+	protected FileTreeIterator(final WorkingTreeIterator p, final File root,
+			FS fs, FileModeStrategy fileModeStrategy) {
+                this(p, root != null ? root.toPath() : null, fs, fileModeStrategy);
+	}
+
+	/**
 	 * Create a new iterator to traverse a subdirectory, given the specified
 	 * FileModeStrategy.
 	 *

@@ -47,6 +47,7 @@ package org.eclipse.jgit.internal.storage.file;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -93,10 +94,15 @@ public class UnpackedObject {
 	public static ObjectLoader parse(byte[] raw, AnyObjectId id)
 			throws IOException {
 		try (WindowCursor wc = new WindowCursor(null)) {
-			return open(new ByteArrayInputStream(raw), null, id, wc);
+			return open(new ByteArrayInputStream(raw), (Path)null, id, wc);
 		}
 	}
 
+	static ObjectLoader open(InputStream in, File path, AnyObjectId id,
+			WindowCursor wc) throws IOException {
+            return open(in, path != null ? path.toPath(): null, id, wc);
+        }
+        
 	static ObjectLoader open(InputStream in, Path path, AnyObjectId id,
 			WindowCursor wc) throws IOException {
 		try {

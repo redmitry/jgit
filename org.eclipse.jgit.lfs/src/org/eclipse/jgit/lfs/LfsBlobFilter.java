@@ -114,7 +114,7 @@ public class LfsBlobFilter {
 	 */
 	public static TemporaryBuffer cleanLfsBlob(Repository db,
 			InputStream originalContent) throws IOException {
-		LocalFile buffer = new TemporaryBuffer.LocalFile(null);
+		LocalFile buffer = new TemporaryBuffer.LocalFile();
 		CleanFilter f = new CleanFilter(db, originalContent, buffer);
 		try {
 			while (f.run() != -1) {

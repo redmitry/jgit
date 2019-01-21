@@ -166,6 +166,16 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	}
         
 	/**
+	 * @deprecated use {@link #getDirectoryPath()}
+	 *
+	 * @return the git directory
+	 */
+	@Nullable
+	File getDirectory() {
+		return directory != null ? directory.toFile() : null;
+	}
+
+	/**
 	 * Get the git directory. This is primarily used for tests.
 	 *
 	 * @return the git directory

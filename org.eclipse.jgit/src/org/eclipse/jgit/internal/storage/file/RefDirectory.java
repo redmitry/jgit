@@ -716,7 +716,7 @@ public class RefDirectory extends RefDatabase {
 		delete(logForPath(name), levels);
 		if (dst.getStorage().isLoose()) {
 			update.unlock();
-			delete(fileFor(name), levels);
+			delete(filePathFor(name), levels);
 		}
 
 		modCnt.incrementAndGet();
@@ -799,7 +799,7 @@ public class RefDirectory extends RefDatabase {
 				// Now delete the loose refs which are now packed
 				for (String refName : refs) {
 					// Lock the loose ref
-					Path refFile = fileFor(refName);
+					Path refFile = filePathFor(refName);
 					if (!fs.exists(refFile)) {
 						continue;
 					}
@@ -1140,7 +1140,7 @@ public class RefDirectory extends RefDatabase {
 	}
 
 	LooseRef scanRef(LooseRef ref, String name) throws IOException {
-		final Path path = fileFor(name);
+		final Path path = filePathFor(name);
 		FileSnapshot currentSnapshot = null;
 
 		if (ref != null) {
@@ -1269,6 +1269,18 @@ public class RefDirectory extends RefDatabase {
 	}
 
 	/**
+	 * @deprecated use {@link #filePathFor(String)}
+	 *
+	 * @param name
+	 *            name of the ref, relative to the Git repository top level
+	 *            directory (so typically starts with refs/).
+	 * @return the loose file location.
+	 */
+	File fileFor(String name) {
+                return filePathFor(name).toFile();
+	}
+
+	/**
 	 * Locate the file on disk for a single reference name.
 	 *
 	 * @param name
@@ -1276,7 +1288,7 @@ public class RefDirectory extends RefDatabase {
 	 *            directory (so typically starts with refs/).
 	 * @return the loose file location.
 	 */
-	Path fileFor(String name) {
+	Path filePathFor(String name) {
 		if (name.startsWith(R_REFS)) {
 			name = name.substring(R_REFS.length());
 			return refsDir.resolve(name);

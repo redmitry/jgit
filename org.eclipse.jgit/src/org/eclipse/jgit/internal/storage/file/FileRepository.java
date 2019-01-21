@@ -314,7 +314,7 @@ public class FileRepository extends Repository {
 					JGitText.get().repositoryAlreadyExists, getDirectoryPath()));
 		}
                 try {
-                        Files.createDirectory(getDirectoryPath());
+                        FileUtils.mkdirs(getDirectoryPath(), true);
                 } catch (FileAlreadyExistsException ex) {}                
                 
 		HideDotFiles hideDotFiles = getConfig().getEnum(

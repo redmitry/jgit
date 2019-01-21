@@ -395,7 +395,7 @@ public class HttpClientConnection implements HttpConnection {
 	public void setFixedLengthStreamingMode(int contentLength) {
 		if (entity != null)
 			throw new IllegalArgumentException();
-		entity = new TemporaryBufferEntity(new LocalFile(null));
+		entity = new TemporaryBufferEntity(new LocalFile());
 		entity.setContentLength(contentLength);
 	}
 
@@ -403,7 +403,7 @@ public class HttpClientConnection implements HttpConnection {
 	@Override
 	public OutputStream getOutputStream() throws IOException {
 		if (entity == null)
-			entity = new TemporaryBufferEntity(new LocalFile(null));
+			entity = new TemporaryBufferEntity(new LocalFile());
 		return entity.getBuffer();
 	}
 
@@ -411,7 +411,7 @@ public class HttpClientConnection implements HttpConnection {
 	@Override
 	public void setChunkedStreamingMode(int chunklen) {
 		if (entity == null)
-			entity = new TemporaryBufferEntity(new LocalFile(null));
+			entity = new TemporaryBufferEntity(new LocalFile());
 		entity.setChunked(true);
 	}
 

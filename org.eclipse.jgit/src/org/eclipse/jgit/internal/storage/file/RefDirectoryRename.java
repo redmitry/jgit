@@ -184,7 +184,7 @@ class RefDirectoryRename extends RefRename {
 			try {
 				refdb.delete(tmp);
 			} catch (IOException err) {
-                                Files.deleteIfExists(refdb.fileFor(tmp.getName()));
+                                Files.deleteIfExists(refdb.filePathFor(tmp.getName()));
 			}
 		}
 	}

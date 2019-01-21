@@ -216,8 +216,8 @@ public class ObjectDirectoryPackParser extends PackParser {
 
 			writeIdx();
 
-//                        FileUtils.setReadOnly(tmpPack, true);
-//                        FileUtils.setReadOnly(tmpIdx, true);
+                        FileUtils.setReadOnly(tmpPack, true);
+                        FileUtils.setReadOnly(tmpIdx, true);
 
 			return renameAndOpenPack(getLockMessage());
 		} finally {

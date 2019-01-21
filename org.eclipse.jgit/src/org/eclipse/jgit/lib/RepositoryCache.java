@@ -453,6 +453,17 @@ public class RepositoryCache {
 		 *            the file system abstraction which will be necessary to
 		 *            perform certain file system operations.
 		 */
+		protected FileKey(File directory, FS fs) {
+                       this(directory != null ? directory.toPath() : null, fs);
+		}
+
+		/**
+		 * @param directory
+		 *            exact location of the repository.
+		 * @param fs
+		 *            the file system abstraction which will be necessary to
+		 *            perform certain file system operations.
+		 */
 		protected FileKey(Path directory, FS fs) {
 			path = canonical(directory);
 			this.fs = fs;

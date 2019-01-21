@@ -49,6 +49,7 @@ package org.eclipse.jgit.transport;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -154,9 +155,29 @@ class TransportLocal extends Transport implements PackTransport {
 
 	private final Path remoteGitDir;
 
+        /**
+         * @deprecated use {@link #TransportLocal(Repository, URIish, Path)}
+         * 
+         * @param local
+         * @param uri
+         * @param gitDir 
+         */
+	TransportLocal(Repository local, URIish uri, File gitDir) {
+		this(local, uri, gitDir != null ? gitDir.toPath() : null);
+	}
+
 	TransportLocal(Repository local, URIish uri, Path gitDir) {
 		super(local, uri);
 		remoteGitDir = gitDir;
+	}
+
+        /**
+         * @deprecated use {@link #TransportLocal(URIish, Path)}
+         * @param uri
+         * @param gitDir 
+         */
+	TransportLocal(URIish uri, File gitDir) {
+		this(uri, gitDir != null ? gitDir.toPath() : null);
 	}
 
 	TransportLocal(URIish uri, Path gitDir) {

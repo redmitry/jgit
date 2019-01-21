@@ -110,6 +110,24 @@ public class OpenSshConfig implements ConfigRepository {
 	/** The base file. */
 	private OpenSshConfigFile configFile;
 
+        /**
+         * @deprecated use {@link #OpenSshConfig(Path, Path)}
+         * 
+         * @param h
+         *         user's home directory
+         * @param cfg 
+         *         config file
+         */
+	OpenSshConfig(File h, File cfg) {
+            this(h.toPath(), cfg.toPath());
+	}
+        
+        /**         * 
+         * @param h
+         *         user's home directory
+         * @param cfg 
+         *         config file
+         */
 	OpenSshConfig(Path h, Path cfg) {
 		configFile = new OpenSshConfigFile(h, cfg,
 				SshSessionFactory.getLocalUserName());

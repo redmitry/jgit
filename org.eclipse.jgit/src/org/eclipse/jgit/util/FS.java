@@ -301,7 +301,9 @@ public abstract class FS {
 	 *            abstract path to test.
 	 * @return true if the file is believed to be executable by the user.
 	 */
-	public abstract boolean canExecute(File f);
+	public boolean canExecute(File f) {
+            return canExecute(f != null ? f.toPath() : null);
+        }
         
 	/**
 	 * Determine if the file is executable (or not).
@@ -328,7 +330,9 @@ public abstract class FS {
 	 *            true to enable execution; false to disable it.
 	 * @return true if the change succeeded; false otherwise.
 	 */
-	public abstract boolean setExecute(File f, boolean canExec);
+	public boolean setExecute(File f, boolean canExec) {
+            return setExecute(f != null ? f.toPath() : null, canExec);
+        }
 
 	/**
 	 * Set a file to be executable by the user.
@@ -606,6 +610,26 @@ public abstract class FS {
                     }
                 }
 		return null;
+	}
+
+	/**
+	 * @deprecated use {@link #readPipe(Path, String[], String)}
+	 *
+	 * @param dir
+	 *            Working directory for the command
+	 * @param command
+	 *            as component array
+	 * @param encoding
+	 *            to be used to parse the command's output
+	 * @return the one-line output of the command or {@code null} if there is
+	 *         none
+	 * @throws org.eclipse.jgit.errors.CommandFailedException
+	 *             thrown when the command failed (return code was non-zero)
+	 */
+	@Nullable
+	protected static String readPipe(File dir, String[] command,
+			String encoding) throws CommandFailedException {
+		return readPipe(dir != null ? dir.toPath() : null, command, encoding, null);
 	}
 
 	/**

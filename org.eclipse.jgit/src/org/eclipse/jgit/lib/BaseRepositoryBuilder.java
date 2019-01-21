@@ -824,12 +824,16 @@ public class BaseRepositoryBuilder<B extends BaseRepositoryBuilder, R extends Re
 	protected void setupGitDir() throws IOException {
 		// No gitDir? Try to assume its under the workTree or a ref to another
 		// location
-		if (getGitDirPath() == null && getWorkTreePath() != null) {
-                        Path dotGit = Paths.get(getWorkTreePath().toString(), DOT_GIT);
-			if (!Files.isRegularFile(dotGit))
-				setGitDir(dotGit);
-			else
-				setGitDir(getSymRef(getWorkTreePath(), dotGit, safeFS()));
+		if (getGitDirPath() == null) {
+                        final Path treePath = getWorkTreePath();
+                        if (treePath != null) {
+                            final Path dotGit = treePath.resolve(DOT_GIT);
+                            if (Files.isRegularFile(dotGit)) {
+                                    setGitDir(getSymRef(treePath, dotGit, safeFS()));
+                            } else {
+                                    setGitDir(dotGit);
+                            }
+                        }
 		}
 	}
 
