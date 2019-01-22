@@ -45,7 +45,7 @@ package org.eclipse.jgit.lib;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -55,6 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
@@ -553,8 +554,8 @@ public class RepositoryCache {
 		}
 
 		private static String readFirstLine(Path head) {
-			try {
-                                return Files.lines(head, Charset.forName("UTF-8")).limit(1).findFirst().get();
+			try (Stream<String> stream = Files.lines(head, StandardCharsets.UTF_8)) {
+                                return stream.findFirst().get();
 			} catch (IOException e) {
                             // do nothing
                         }
