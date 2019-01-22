@@ -74,6 +74,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.annotations.Nullable;
 import org.eclipse.jgit.api.errors.JGitInternalException;
@@ -1309,8 +1310,8 @@ public abstract class FS {
 	 */
 	public Entry[] list(Path directory, FileModeStrategy fileModeStrategy) {
                 
-                try {
-                    final Path[] files = Files.list(directory).toArray(Path[]::new);
+                try (Stream<Path> stream = Files.list(directory)) {
+                    final Path[] files = stream.toArray(Path[]::new);
                     final Entry[] result = new Entry[files.length];
                     for (int i = 0; i < result.length; i++) {
                             result[i] = new FileEntry(files[i], this, fileModeStrategy);

@@ -50,6 +50,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.internal.storage.file.ObjectDirectory.AlternateHandle;
 import org.eclipse.jgit.internal.storage.pack.ObjectToPack;
@@ -95,12 +96,12 @@ class CachedObjectDirectory extends FileObjectDatabase {
 	private ObjectIdOwnerMap<UnpackedObjectId> scanLoose() {
 		ObjectIdOwnerMap<UnpackedObjectId> m = new ObjectIdOwnerMap<>();
 		Path objects = wrapped.getDirectoryPath();
-                try {
-                    String[] fanout = Files.list(objects).map(x -> x.getFileName().toString()).toArray(String[]::new);
+                try (Stream<Path> stream = Files.list(objects)){
+                    String[] fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
                     for (String d : fanout) {
                             if (d.length() == 2) {
-                                try {
-                                    String[] entries = Files.list(objects.resolve(d)).map(x -> x.getFileName().toString()).toArray(String[]::new);
+                                try (Stream<Path> s = Files.list(objects.resolve(d))){
+                                    String[] entries = s.map(x -> x.getFileName().toString()).toArray(String[]::new);
                                     for (String e : entries) {
                                             if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
                                                     continue;

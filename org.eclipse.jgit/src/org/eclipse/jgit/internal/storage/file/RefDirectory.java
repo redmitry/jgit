@@ -490,9 +490,9 @@ public class RefDirectory extends RefDatabase {
 		private boolean scanTree(String prefix, Path dir) {
                     
                         final String[] entries;
-                        try {
-                                entries = Files.list(dir).filter(x -> !x.getFileName()
-                                .endsWith(LOCK_SUFFIX)).map(x -> x.getFileName().toString()).toArray(String[]::new);
+                        try (Stream<Path> stream = Files.list(dir)) {
+                                entries = stream.filter(x -> !x.getFileName()
+                                    .endsWith(LOCK_SUFFIX)).map(x -> x.getFileName().toString()).toArray(String[]::new);
                         } catch(IOException ex) {
                             return false;
                         }

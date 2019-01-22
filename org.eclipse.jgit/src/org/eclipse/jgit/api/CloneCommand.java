@@ -251,11 +251,12 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	}
 
 	private static boolean isNonEmptyDirectory(Path dir) {
-            try {
-                return dir != null && Files.exists(dir, new LinkOption[0]) && Files.list(dir).iterator().hasNext();
-            } catch (IOException ex) {
+                if (dir != null) {
+                        try (Stream<Path> stream = Files.list(dir)) {
+                                return stream.count() > 0;
+                        } catch (IOException ex) {}
+                }
                 return false;
-            }
 	}
 
 	void verifyDirectories(URIish u) {

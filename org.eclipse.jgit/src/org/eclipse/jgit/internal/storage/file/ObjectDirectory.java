@@ -70,6 +70,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.errors.CorruptObjectException;
 import org.eclipse.jgit.errors.PackInvalidException;
@@ -280,9 +281,9 @@ public class ObjectDirectory extends FileObjectDatabase {
 	/** {@inheritDoc} */
 	@Override
 	public void create() throws IOException {
-                Files.createDirectory(objects);
-                Files.createDirectory(infoDirectory);
-                Files.createDirectory(packDirectory);
+		FileUtils.mkdirs(objects);
+		FileUtils.mkdir(infoDirectory);
+		FileUtils.mkdir(packDirectory);
 	}
 
 	/** {@inheritDoc} */
@@ -466,9 +467,8 @@ public class ObjectDirectory extends FileObjectDatabase {
 		String fanOut = id.name().substring(0, 2);
                 
                 final Path dir = getDirectoryPath();
-                String[] entries = Files.list(dir != null ? dir.resolve(fanOut) : Paths.get(fanOut))
-                        .map(path -> path.getFileName().toString()).toArray(String[]::new);
-		if (entries != null) {
+                try (Stream<Path> stream = Files.list(dir != null ? dir.resolve(fanOut) : Paths.get(fanOut))) {
+                        String[] entries = stream.map(path -> path.getFileName().toString()).toArray(String[]::new);
 			for (String e : entries) {
 				if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
 					continue;
@@ -1040,8 +1040,8 @@ public class ObjectDirectory extends FileObjectDatabase {
 	}
 
 	private Set<String> listPackDirectory() {
-                try {
-                        return Files.list(packDirectory).map(x -> x.getFileName().toString())
+                try (Stream<Path> stream = Files.list(packDirectory)){
+                        return stream.map(x -> x.getFileName().toString())
                                 .filter(x -> x.startsWith("pack-")).collect(Collectors.toSet());
                 } catch (IOException ex) {
                     return Collections.EMPTY_SET;

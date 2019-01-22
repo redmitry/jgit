@@ -64,6 +64,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.api.errors.FilterFailedException;
 import org.eclipse.jgit.attributes.AttributesNode;
@@ -1003,8 +1004,10 @@ public abstract class WorkingTreeIterator extends AbstractTreeIterator {
 					return true;
 				} else if (ObjectId.zeroId().compareTo(idBuffer,
 						idOffset) == 0) {
-					return Files.list(repository.getWorkTreePath().resolve(
-							entry.getPathString())).count() > 0;
+                                        try (Stream<Path> stream = Files.list(repository.getWorkTreePath().resolve(
+							entry.getPathString()))) {
+                                                return stream.count() > 0;
+                                        }
 				}
 				return false;
 			} else if (mode == FileMode.SYMLINK.getBits())

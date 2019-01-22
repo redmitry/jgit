@@ -53,6 +53,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.JGitInternalException;
@@ -173,8 +174,10 @@ public class SubmoduleDeinitCommand
 			throw new JGitInternalException(MessageFormat.format(
 					JGitText.get().expectedDirectoryNotSubmodule, path));
 		}
-		for (Iterator<Path> iter = Files.list(dir).iterator(); iter.hasNext();) {
-                    FileUtils.delete(iter.next(), RECURSIVE);
+                try (Stream<Path> stream = Files.list(dir)) {
+                    for (Iterator<Path> iter = stream.iterator(); iter.hasNext();) {
+                        FileUtils.delete(iter.next(), RECURSIVE);
+                    }
                 }
 	}
 

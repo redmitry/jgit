@@ -470,49 +470,55 @@ public class GC {
 		ObjectDirectory objdb = repo.getObjectDatabase();
 		Collection<PackFile> packs = objdb.getPacks();
 		Path objects = repo.getObjectsDirectoryPath();
-		String[] fanout = Files.list(objects).map(x -> x.getFileName().toString()).toArray(String[]::new);
+                
+                try (Stream<Path> stream = Files.list(objects)) {
+                        String[] fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
 
-		if (fanout != null && fanout.length > 0) {
-			pm.beginTask(JGitText.get().pruneLoosePackedObjects, fanout.length);
-			try {
-				for (String d : fanout) {
-					checkCancelled();
-					pm.update(1);
-					if (d.length() != 2)
-						continue;
-					String[] entries = Files.list(objects.resolve(d)).map(x -> x.getFileName().toString()).toArray(String[]::new);
-					if (entries == null)
-						continue;
-					for (String e : entries) {
-						checkCancelled();
-						if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
-							continue;
-						ObjectId id;
-						try {
-							id = ObjectId.fromString(d + e);
-						} catch (IllegalArgumentException notAnObject) {
-							// ignoring the file that does not represent loose
-							// object
-							continue;
-						}
-						boolean found = false;
-						for (PackFile p : packs) {
-							checkCancelled();
-							if (p.hasObject(id)) {
-								found = true;
-								break;
-							}
-						}
-						if (found)
-							FileUtils.delete(objdb.filePathFor(id), FileUtils.RETRY
-									| FileUtils.SKIP_MISSING
-									| FileUtils.IGNORE_ERRORS);
-					}
-				}
-			} finally {
-				pm.endTask();
-			}
-		}
+                        if (fanout != null && fanout.length > 0) {
+                                pm.beginTask(JGitText.get().pruneLoosePackedObjects, fanout.length);
+                                try {
+                                        for (String d : fanout) {
+                                                checkCancelled();
+                                                pm.update(1);
+                                                if (d.length() != 2) {
+                                                        continue;
+                                                }
+                                                try (Stream<Path> s = Files.list(objects.resolve(d))) {
+                                                        String[] entries = s.map(x -> x.getFileName().toString()).toArray(String[]::new);
+                                                        if (entries == null)
+                                                                continue;
+                                                        for (String e : entries) {
+                                                                checkCancelled();
+                                                                if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
+                                                                        continue;
+                                                                ObjectId id;
+                                                                try {
+                                                                        id = ObjectId.fromString(d + e);
+                                                                } catch (IllegalArgumentException notAnObject) {
+                                                                        // ignoring the file that does not represent loose
+                                                                        // object
+                                                                        continue;
+                                                                }
+                                                                boolean found = false;
+                                                                for (PackFile p : packs) {
+                                                                        checkCancelled();
+                                                                        if (p.hasObject(id)) {
+                                                                                found = true;
+                                                                                break;
+                                                                        }
+                                                                }
+                                                                if (found)
+                                                                        FileUtils.delete(objdb.filePathFor(id), FileUtils.RETRY
+                                                                                        | FileUtils.SKIP_MISSING
+                                                                                        | FileUtils.IGNORE_ERRORS);
+                                                        }
+                                                }
+                                        }
+                                } finally {
+                                        pm.endTask();
+                                }
+                        }
+                }
 	}
 
 	/**
@@ -537,8 +543,8 @@ public class GC {
 		Set<ObjectId> indexObjects = null;
 		Path objects = repo.getObjectsDirectoryPath();
 		String[] fanout;
-                try {
-                    fanout = Files.list(objects).map(x -> x.getFileName().toString()).toArray(String[]::new);
+                try (Stream<Path> stream = Files.list(objects)) {
+                    fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
                 } catch(IOException ex) {
                     return;
                 }
@@ -552,8 +558,8 @@ public class GC {
 					continue;
                                 
                                 Path[] entries;
-                                try {
-                                        entries = Files.list(objects.resolve(d)).toArray(Path[]::new);
+                                try (Stream<Path> stream = Files.list(objects.resolve(d))) {
+                                        entries = stream.toArray(Path[]::new);
                                 } catch (IOException ex) {
                                     continue;
                                 }
@@ -1355,22 +1361,28 @@ public class GC {
 				ret.numberOfBitmaps += f.getBitmapIndex().getBitmapCount();
 		}
 		Path objDir = repo.getObjectsDirectoryPath();
-		String[] fanout = Files.list(objDir).map(x -> x.getFileName().toString()).toArray(String[]::new);
-		if (fanout != null && fanout.length > 0) {
-			for (String d : fanout) {
-				if (d.length() != 2)
-					continue;
-				Path[] entries = Files.list(objDir.resolve(d)).toArray(Path[]::new);
-				if (entries == null)
-					continue;
-				for (Path f : entries) {
-					if (f.getFileName().toString().length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
-						continue;
-					ret.numberOfLooseObjects++;
-					ret.sizeOfLooseObjects += f.getFileName().toString().length();
-				}
-			}
-		}
+                try (Stream<Path> stream = Files.list(objDir)) {
+                        String[] fanout = stream .map(x -> x.getFileName().toString()).toArray(String[]::new);
+                        if (fanout != null && fanout.length > 0) {
+                                for (String d : fanout) {
+                                        if (d.length() != 2) {
+                                                continue;
+                                        }
+                                        Path[] entries;
+                                        try (Stream<Path> s = Files.list(objDir.resolve(d))) {
+                                                entries = s.toArray(Path[]::new);
+                                        } catch(IOException ex) {
+                                                continue;
+                                        }
+                                        for (Path f : entries) {
+                                                if (f.getFileName().toString().length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
+                                                        continue;
+                                                ret.numberOfLooseObjects++;
+                                                ret.sizeOfLooseObjects += f.getFileName().toString().length();
+                                        }
+                                }
+                        }
+                }
 
 		RefDatabase refDb = repo.getRefDatabase();
 		for (Ref r : refDb.getRefs()) {

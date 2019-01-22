@@ -77,6 +77,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.internal.JGitText;
 import org.eclipse.jgit.lib.Constants;
@@ -214,25 +215,27 @@ public class FileUtils {
 			return;
 
 		if ((options & RECURSIVE) != 0 && fs.isDirectory(f)) {
-			final Path[] items = Files.list(f).toArray(Path[]::new);
+                        try (Stream<Path> stream = Files.list(f)) {
+                                final Path[] items = stream.toArray(Path[]::new);
 
-                        List<Path> files = new ArrayList<>();
-                        List<Path> dirs = new ArrayList<>();
-                        for (Path c : items) {
-                                if (Files.isDirectory(c)) {
-                                        dirs.add(c);
-                                } else {
-                                        files.add(c);
+                                List<Path> files = new ArrayList<>();
+                                List<Path> dirs = new ArrayList<>();
+                                for (Path c : items) {
+                                        if (Files.isDirectory(c)) {
+                                                dirs.add(c);
+                                        } else {
+                                                files.add(c);
+                                        }
                                 }
-                        }
-                        // Try to delete files first, otherwise options
-                        // EMPTY_DIRECTORIES_ONLY|RECURSIVE will delete empty
-                        // directories before aborting, depending on order.
-                        for (Path file : files) {
-                                delete(file, options);
-                        }
-                        for (Path d : dirs) {
-                                delete(d, options);
+                                // Try to delete files first, otherwise options
+                                // EMPTY_DIRECTORIES_ONLY|RECURSIVE will delete empty
+                                // directories before aborting, depending on order.
+                                for (Path file : files) {
+                                        delete(file, options);
+                                }
+                                for (Path d : dirs) {
+                                        delete(d, options);
+                                }
                         }
 		}
 
