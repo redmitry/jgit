@@ -47,7 +47,6 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
@@ -261,10 +260,11 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 
 	void verifyDirectories(URIish u) {
 		if (directory == null && gitDir == null) {
-			directory = Paths.get(u.getHumanishName(), bare ? Constants.DOT_GIT_EXT : ""); //$NON-NLS-1$
+			directory = bare ? Paths.get(u.getHumanishName() + Constants.DOT_GIT_EXT)
+                                         : Paths.get(u.getHumanishName());
 		}
-		directoryExistsInitially = directory != null && Files.exists(directory, new LinkOption[0]);
-		gitDirExistsInitially = gitDir != null &&  Files.exists(gitDir, new LinkOption[0]);
+		directoryExistsInitially = directory != null && Files.exists(directory);
+		gitDirExistsInitially = gitDir != null && Files.exists(gitDir);
 		validateDirs(directory, gitDir, bare);
 		if (isNonEmptyDirectory(directory)) {
 			throw new JGitInternalException(MessageFormat.format(
@@ -710,11 +710,11 @@ public class CloneCommand extends TransportCommand<CloneCommand, Git> {
 	private static void validateDirs(Path directory, Path gitDir, boolean bare)
 			throws IllegalStateException {
 		if (directory != null) {
-			if (Files.exists(directory, new LinkOption[0]) && !Files.isDirectory(directory, new LinkOption[0])) {
+			if (Files.exists(directory) && !Files.isDirectory(directory)) {
 				throw new IllegalStateException(MessageFormat.format(
 						JGitText.get().initFailedDirIsNoDirectory, directory));
 			}
-			if (gitDir != null && Files.exists(gitDir, new LinkOption[0]) && !Files.isDirectory(gitDir, new LinkOption[0])) {
+			if (gitDir != null && Files.exists(gitDir) && !Files.isDirectory(gitDir)) {
 				throw new IllegalStateException(MessageFormat.format(
 						JGitText.get().initFailedGitDirIsNoDirectory,
 						gitDir));
