@@ -555,9 +555,8 @@ public class DirCache {
 		readIndexChecksum = NO_CHECKSUM;
 	}
 
-	private void readFrom(InputStream inStream) throws IOException,
+	private void readFrom(InputStream in) throws IOException,
 			CorruptObjectException {
-		final BufferedInputStream in = new BufferedInputStream(inStream);
 		final MessageDigest md = Constants.newMessageDigest();
 
 		// Read the index header and verify we understand it.

@@ -1571,12 +1571,12 @@ public class GC {
 		int n = 0;
 		int threshold = (auto + 255) / 256;
 		Path dir = repo.getObjectsDirectoryPath().resolve("17"); //$NON-NLS-1$
-		if (!dir.toFile().exists()) {
+		if (!Files.exists(dir)) {
 			return false;
 		}
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, file -> {
 					Path fileName = file.getFileName();
-					return file.toFile().isFile() && fileName != null
+					return Files.isRegularFile(file) && fileName != null
 							&& PATTERN_LOOSE_OBJECT.matcher(fileName.toString())
 									.matches();
 				})) {

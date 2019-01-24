@@ -229,8 +229,8 @@ public class LockFile {
 	 */
 	public void copyCurrentContent() throws IOException {
 		requireLock();
-		try {
-                        Files.copy(ref, Channels.newOutputStream(os));
+		try (OutputStream out = Channels.newOutputStream(os)) {
+                        Files.copy(ref, out);
 		} catch (NoSuchFileException fnfe) {
 			if (Files.exists(ref)) {
 				unlock();

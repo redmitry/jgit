@@ -410,7 +410,7 @@ public class ObjectDirectoryPackParser extends PackParser {
                         
                         buf.position(0);
                         buf.limit(len);
-                        while(buf.hasRemaining() && out. write(buf) >= 0) {
+                        while(buf.hasRemaining() && out.write(buf) >= 0) {
                             // do nothing
                         }
 			packEnd += len;

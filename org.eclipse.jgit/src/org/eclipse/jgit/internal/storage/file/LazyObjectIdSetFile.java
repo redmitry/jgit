@@ -48,9 +48,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -97,9 +94,7 @@ public class LazyObjectIdSetFile implements ObjectIdSet {
 
 	private ObjectIdOwnerMap<Entry> load() {
 		ObjectIdOwnerMap<Entry> r = new ObjectIdOwnerMap<>();
-		try (InputStream fin = Files.newInputStream(src);
-				Reader rin = new InputStreamReader(fin, UTF_8);
-				BufferedReader br = new BufferedReader(rin)) {
+		try (BufferedReader br = Files.newBufferedReader(src, UTF_8)) {
 			MutableObjectId id = new MutableObjectId();
 			for (String line; (line = br.readLine()) != null;) {
 				id.fromString(line);
