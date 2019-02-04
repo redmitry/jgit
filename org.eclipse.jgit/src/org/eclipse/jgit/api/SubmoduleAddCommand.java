@@ -42,8 +42,9 @@
  */
 package org.eclipse.jgit.api;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -203,12 +204,16 @@ public class SubmoduleAddCommand extends
 			throw new JGitInternalException(e.getMessage(), e);
 		}
 		// Clone submodule repository
-		File moduleDirectory = SubmoduleWalk.getSubmoduleDirectory(repo, path);
+		Path moduleDirectory = SubmoduleWalk.getSubmoduleDirectoryPath(repo, path);
 		CloneCommand clone = Git.cloneRepository();
 		configure(clone);
 		clone.setDirectory(moduleDirectory);
-		clone.setGitDir(new File(new File(repo.getDirectory(),
-				Constants.MODULES), path));
+                
+                Path directoryPath = repo.getDirectoryPath();
+                Path gitDir = directoryPath != null ? directoryPath.resolve(Constants.MODULES)
+                                                    : Paths.get(Constants.MODULES);
+		clone.setGitDir(gitDir.resolve(path));
+                
 		clone.setURI(resolvedUri);
 		if (monitor != null)
 			clone.setProgressMonitor(monitor);
@@ -229,8 +234,7 @@ public class SubmoduleAddCommand extends
 		}
 
 		// Save path and URL to parent repository's .gitmodules file
-		FileBasedConfig modulesConfig = new FileBasedConfig(new File(
-				repo.getWorkTree(), Constants.DOT_GIT_MODULES), repo.getFS());
+		FileBasedConfig modulesConfig = new FileBasedConfig(repo.getWorkTreePath().resolve(Constants.DOT_GIT_MODULES), repo.getFS());
 		try {
 			modulesConfig.load();
 			modulesConfig.setString(ConfigConstants.CONFIG_SUBMODULE_SECTION,

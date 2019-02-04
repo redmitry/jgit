@@ -44,11 +44,13 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.internal.storage.file.ObjectDirectory.AlternateHandle;
 import org.eclipse.jgit.internal.storage.pack.ObjectToPack;
@@ -93,27 +95,30 @@ class CachedObjectDirectory extends FileObjectDatabase {
 
 	private ObjectIdOwnerMap<UnpackedObjectId> scanLoose() {
 		ObjectIdOwnerMap<UnpackedObjectId> m = new ObjectIdOwnerMap<>();
-		File objects = wrapped.getDirectory();
-		String[] fanout = objects.list();
-		if (fanout == null)
-			return m;
-		for (String d : fanout) {
-			if (d.length() != 2)
-				continue;
-			String[] entries = new File(objects, d).list();
-			if (entries == null)
-				continue;
-			for (String e : entries) {
-				if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
-					continue;
-				try {
-					ObjectId id = ObjectId.fromString(d + e);
-					m.add(new UnpackedObjectId(id));
-				} catch (IllegalArgumentException notAnObject) {
-					// ignoring the file that does not represent loose object
-				}
-			}
-		}
+		Path objects = wrapped.getDirectoryPath();
+                try (Stream<Path> stream = Files.list(objects)) {
+                    String[] fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
+                    for (String d : fanout) {
+                            if (d.length() == 2) {
+                                try (Stream<Path> s = Files.list(objects.resolve(d))){
+                                    String[] entries = s.map(x -> x.getFileName().toString()).toArray(String[]::new);
+                                    for (String e : entries) {
+                                            if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
+                                                    continue;
+                                            try {
+                                                    ObjectId id = ObjectId.fromString(d + e);
+                                                    m.add(new UnpackedObjectId(id));
+                                            } catch (IllegalArgumentException notAnObject) {
+                                                    // ignoring the file that does not represent loose object
+                                            }
+                                    }
+                                } catch(IOException ex) {
+                                        continue;
+                                }
+                            }
+                    }
+                } catch(IOException ex) { }
+
 		return m;
 	}
 
@@ -130,13 +135,13 @@ class CachedObjectDirectory extends FileObjectDatabase {
 	}
 
 	@Override
-	File getDirectory() {
-		return wrapped.getDirectory();
+	Path getDirectoryPath() {
+		return wrapped.getDirectoryPath();
 	}
-
+        
 	@Override
-	File fileFor(AnyObjectId id) {
-		return wrapped.fileFor(id);
+	Path filePathFor(AnyObjectId id) {
+		return wrapped.filePathFor(id);
 	}
 
 	@Override
@@ -254,7 +259,7 @@ class CachedObjectDirectory extends FileObjectDatabase {
 	}
 
 	@Override
-	InsertLooseObjectResult insertUnpackedObject(File tmp, ObjectId objectId,
+	InsertLooseObjectResult insertUnpackedObject(Path tmp, ObjectId objectId,
 			boolean createDuplicate) throws IOException {
 		InsertLooseObjectResult result = wrapped.insertUnpackedObject(tmp,
 				objectId, createDuplicate);
@@ -272,7 +277,7 @@ class CachedObjectDirectory extends FileObjectDatabase {
 	}
 
 	@Override
-	PackFile openPack(File pack) throws IOException {
+	PackFile openPack(Path pack) throws IOException {
 		return wrapped.openPack(pack);
 	}
 

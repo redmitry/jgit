@@ -45,12 +45,16 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.text.MessageFormat;
 import java.util.Arrays;
@@ -93,16 +97,16 @@ public class ObjectDirectoryPackParser extends PackParser {
 	private boolean keepEmpty;
 
 	/** Path of the temporary file holding the pack data. */
-	private File tmpPack;
+	private Path tmpPack;
 
 	/**
 	 * Path of the index created for the pack, to find objects quickly at read
 	 * time.
 	 */
-	private File tmpIdx;
+	private Path tmpIdx;
 
 	/** Read/write handle to {@link #tmpPack} while it is being parsed. */
-	private RandomAccessFile out;
+	private SeekableByteChannel out;
 
 	/** Length of the original pack stream, before missing bases were appended. */
 	private long origEnd;
@@ -175,43 +179,59 @@ public class ObjectDirectoryPackParser extends PackParser {
 		if (newPack == null)
 			return super.getPackSize();
 
-		File pack = newPack.getPackFile();
-		long size = pack.length();
-		String p = pack.getAbsolutePath();
-		String i = p.substring(0, p.length() - ".pack".length()) + ".idx"; //$NON-NLS-1$ //$NON-NLS-2$
-		File idx = new File(i);
-		if (idx.exists() && idx.isFile())
-			size += idx.length();
-		return size;
+		final Path pack = newPack.getPackFilePath();
+                try {
+                    long size = Files.size(pack);
+                    String p = pack.toAbsolutePath().toString();
+                    String i = p.substring(0, p.length() - ".pack".length()) + ".idx"; //$NON-NLS-1$ //$NON-NLS-2$
+                    Path idx = Paths.get(i);
+                    if (Files.exists(idx) && Files.isRegularFile(idx))
+                            size += Files.size(idx);
+                    return size;
+                } catch(IOException ex) {
+                    return 0;
+                }
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	public PackLock parse(ProgressMonitor receiving, ProgressMonitor resolving)
 			throws IOException {
-		tmpPack = File.createTempFile("incoming_", ".pack", db.getDirectory()); //$NON-NLS-1$ //$NON-NLS-2$
-		tmpIdx = new File(db.getDirectory(), baseName(tmpPack) + ".idx"); //$NON-NLS-1$
+                final Path directoryPath = db.getDirectoryPath();
+                if (directoryPath == null) {
+                        tmpPack = Files.createTempFile("incoming_", ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
+                        tmpIdx = Paths.get(baseName(tmpPack) + ".idx"); //$NON-NLS-1$
+                } else {
+                        tmpPack = Files.createTempFile(directoryPath, "incoming_", ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
+                        tmpIdx = directoryPath.resolve(baseName(tmpPack) + ".idx"); //$NON-NLS-1$
+                }
+                
 		try {
-			out = new RandomAccessFile(tmpPack, "rw"); //$NON-NLS-1$
+			out = Files.newByteChannel(tmpPack, 
+                                StandardOpenOption.CREATE, StandardOpenOption.READ,
+                                StandardOpenOption.WRITE, StandardOpenOption.SYNC);
 
 			super.parse(receiving, resolving);
 
-			out.seek(packEnd);
-			out.write(packHash);
-			out.getChannel().force(true);
+                        ByteBuffer buf = ByteBuffer.wrap(packHash);
+			out.position(packEnd);
+                        while (buf.hasRemaining()) {
+                            out.write(buf);
+                        }
+
 			out.close();
 
 			writeIdx();
 
-			tmpPack.setReadOnly();
-			tmpIdx.setReadOnly();
+                        FileUtils.setReadOnly(tmpPack, true);
+                        FileUtils.setReadOnly(tmpIdx, true);
 
 			return renameAndOpenPack(getLockMessage());
 		} finally {
 			if (def != null)
 				def.end();
 			try {
-				if (out != null && out.getChannel().isOpen())
+				if (out != null && out.isOpen())
 					out.close();
 			} catch (IOException closeError) {
 				// Ignored. We want to delete the file.
@@ -286,13 +306,16 @@ public class ObjectDirectoryPackParser extends PackParser {
 	@Override
 	protected void onStoreStream(byte[] raw, int pos, int len)
 			throws IOException {
-		out.write(raw, pos, len);
+            final ByteBuffer buf = ByteBuffer.wrap(raw, pos, len);
+            while(buf.hasRemaining()) {
+                out.write(buf);
+            }
 	}
 
 	/** {@inheritDoc} */
 	@Override
 	protected void onPackFooter(byte[] hash) throws IOException {
-		packEnd = out.getFilePointer();
+		packEnd = out.position();
 		origEnd = packEnd;
 		origHash = hash;
 		packHash = hash;
@@ -302,7 +325,7 @@ public class ObjectDirectoryPackParser extends PackParser {
 	@Override
 	protected ObjectTypeAndSize seekDatabase(UnresolvedDelta delta,
 			ObjectTypeAndSize info) throws IOException {
-		out.seek(delta.getOffset());
+		out.position(delta.getOffset());
 		crc.reset();
 		return readObjectHeader(info);
 	}
@@ -311,7 +334,7 @@ public class ObjectDirectoryPackParser extends PackParser {
 	@Override
 	protected ObjectTypeAndSize seekDatabase(PackedObjectInfo obj,
 			ObjectTypeAndSize info) throws IOException {
-		out.seek(obj.getOffset());
+		out.position(obj.getOffset());
 		crc.reset();
 		return readObjectHeader(info);
 	}
@@ -319,7 +342,8 @@ public class ObjectDirectoryPackParser extends PackParser {
 	/** {@inheritDoc} */
 	@Override
 	protected int readDatabase(byte[] dst, int pos, int cnt) throws IOException {
-		return out.read(dst, pos, cnt);
+                final ByteBuffer buf = ByteBuffer.wrap(dst, pos, cnt);
+                return out.read(buf);
 	}
 
 	/** {@inheritDoc} */
@@ -328,16 +352,23 @@ public class ObjectDirectoryPackParser extends PackParser {
 		return oldCRC == (int) crc.getValue();
 	}
 
-	private static String baseName(File tmpPack) {
-		String name = tmpPack.getName();
+	private static String baseName(Path tmpPack) {
+		String name = tmpPack.getFileName().toString();
 		return name.substring(0, name.lastIndexOf('.'));
 	}
 
 	private void cleanupTemporaryFiles() {
-		if (tmpIdx != null && !tmpIdx.delete() && tmpIdx.exists())
-			tmpIdx.deleteOnExit();
-		if (tmpPack != null && !tmpPack.delete() && tmpPack.exists())
-			tmpPack.deleteOnExit();
+                if (tmpIdx != null && Files.exists(tmpIdx)) {
+                        try {
+                                Files.deleteIfExists(tmpIdx);
+                        } catch(IOException ex) {}
+                }
+
+                if (tmpPack != null && Files.exists(tmpPack)) {
+                        try {
+                                Files.deleteIfExists(tmpPack);
+                        } catch(IOException ex) {}
+                }
 	}
 
 	/** {@inheritDoc} */
@@ -346,36 +377,49 @@ public class ObjectDirectoryPackParser extends PackParser {
 			final PackedObjectInfo info) throws IOException {
 		info.setOffset(packEnd);
 
-		final byte[] buf = buffer();
+		final byte[] arr = buffer();
+                final ByteBuffer buf = ByteBuffer.wrap(arr);
+
 		int sz = data.length;
 		int len = 0;
-		buf[len++] = (byte) ((typeCode << 4) | sz & 15);
+		arr[len++] = (byte) ((typeCode << 4) | sz & 15);
 		sz >>>= 4;
 		while (sz > 0) {
-			buf[len - 1] |= 0x80;
-			buf[len++] = (byte) (sz & 0x7f);
+			arr[len - 1] |= 0x80;
+			arr[len++] = (byte) (sz & 0x7f);
 			sz >>>= 7;
 		}
 
-		tailDigest.update(buf, 0, len);
+		tailDigest.update(arr, 0, len);
 		crc.reset();
-		crc.update(buf, 0, len);
-		out.seek(packEnd);
-		out.write(buf, 0, len);
+		crc.update(arr, 0, len);
+		out.position(packEnd);
+                
+                buf.limit(len);
+                while(buf.hasRemaining()) {
+                    out.write(buf);
+                }
+
 		packEnd += len;
 
-		if (def == null)
+		if (def == null) {
 			def = new Deflater(Deflater.DEFAULT_COMPRESSION, false);
-		else
+                } else {
 			def.reset();
+                }
 		def.setInput(data);
 		def.finish();
 
 		while (!def.finished()) {
-			len = def.deflate(buf);
-			tailDigest.update(buf, 0, len);
-			crc.update(buf, 0, len);
-			out.write(buf, 0, len);
+			len = def.deflate(arr);
+			tailDigest.update(arr, 0, len);
+			crc.update(arr, 0, len);
+                        
+                        buf.position(0);
+                        buf.limit(len);
+                        while(buf.hasRemaining()) {
+                            out.write(buf);
+                        }
 			packEnd += len;
 		}
 
@@ -386,37 +430,50 @@ public class ObjectDirectoryPackParser extends PackParser {
 	/** {@inheritDoc} */
 	@Override
 	protected void onEndThinPack() throws IOException {
-		final byte[] buf = buffer();
-
+		final byte[] arr = buffer();
+                final ByteBuffer buf = ByteBuffer.wrap(arr);
+                
 		final MessageDigest origDigest = Constants.newMessageDigest();
 		final MessageDigest tailDigest2 = Constants.newMessageDigest();
 		final MessageDigest packDigest = Constants.newMessageDigest();
 
 		long origRemaining = origEnd;
-		out.seek(0);
-		out.readFully(buf, 0, 12);
-		origDigest.update(buf, 0, 12);
+		out.position(0);
+                
+                buf.limit(12); // pos == 0;
+                while(buf.hasRemaining() && out.read(buf) >= 0) {
+                    // do nothing
+                }
+
+		origDigest.update(arr, 0, 12);
 		origRemaining -= 12;
 
-		NB.encodeInt32(buf, 8, getObjectCount());
-		out.seek(0);
-		out.write(buf, 0, 12);
-		packDigest.update(buf, 0, 12);
+		NB.encodeInt32(arr, 8, getObjectCount());
+		out.position(0);
+                
+                buf.position(0); // limit == 12
+                while(buf.hasRemaining() && out.write(buf) >= 0) {
+                    // do nothing;
+                }
 
-		for (;;) {
+		packDigest.update(arr, 0, 12);
+
+		while(true) {
+                        buf.clear();
 			final int n = out.read(buf);
 			if (n < 0)
 				break;
 			if (origRemaining != 0) {
 				final int origCnt = (int) Math.min(n, origRemaining);
-				origDigest.update(buf, 0, origCnt);
+				origDigest.update(arr, 0, origCnt);
 				origRemaining -= origCnt;
 				if (origRemaining == 0)
-					tailDigest2.update(buf, origCnt, n - origCnt);
-			} else
-				tailDigest2.update(buf, 0, n);
+					tailDigest2.update(arr, origCnt, n - origCnt);
+			} else  {
+				tailDigest2.update(arr, 0, n);
+                        }
 
-			packDigest.update(buf, 0, n);
+			packDigest.update(arr, 0, n);
 		}
 
 		if (!Arrays.equals(origDigest.digest(), origHash) || !Arrays
@@ -429,14 +486,15 @@ public class ObjectDirectoryPackParser extends PackParser {
 
 	private void writeIdx() throws IOException {
 		List<PackedObjectInfo> list = getSortedObjectList(null /* by ObjectId */);
-		try (FileOutputStream os = new FileOutputStream(tmpIdx)) {
+		try (OutputStream os = Files.newOutputStream(tmpIdx, 
+                        StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC)) {
 			final PackIndexWriter iw;
-			if (indexVersion <= 0)
+			if (indexVersion <= 0) {
 				iw = PackIndexWriter.createOldestPossible(os, list);
-			else
+                        } else {
 				iw = PackIndexWriter.createVersion(os, indexVersion);
+                        }
 			iw.write(list, packHash);
-			os.getChannel().force(true);
 		}
 	}
 
@@ -456,22 +514,27 @@ public class ObjectDirectoryPackParser extends PackParser {
 		}
 
 		final String name = ObjectId.fromRaw(d.digest()).name();
-		final File packDir = new File(db.getDirectory(), "pack"); //$NON-NLS-1$
-		final File finalPack = new File(packDir, "pack-" + name + ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
-		final File finalIdx = new File(packDir, "pack-" + name + ".idx"); //$NON-NLS-1$ //$NON-NLS-2$
+		final Path packDir = db.getDirectoryPath().resolve("pack"); //$NON-NLS-1$
+                final Path finalPack = packDir.resolve("pack-" + name + ".pack"); //$NON-NLS-1$ //$NON-NLS-2$
+                final Path finalIdx = packDir.resolve("pack-" + name + ".idx"); //$NON-NLS-1$ //$NON-NLS-2$
+
 		final PackLock keep = new PackLock(finalPack, db.getFS());
 
-		if (!packDir.exists() && !packDir.mkdir() && !packDir.exists()) {
-			// The objects/pack directory isn't present, and we are unable
-			// to create it. There is no way to move this pack in.
-			//
-			cleanupTemporaryFiles();
-			throw new IOException(MessageFormat.format(
-					JGitText.get().cannotCreateDirectory, packDir
-							.getAbsolutePath()));
-		}
+                if (!Files.exists(packDir)) {
+                        try {
+                                Files.createDirectory(packDir);
+                        } catch (IOException ex) {
+                                // The objects/pack directory isn't present, and we are unable
+                                // to create it. There is no way to move this pack in.
+                                //
+                                cleanupTemporaryFiles();
+                                throw new IOException(MessageFormat.format(
+                                                JGitText.get().cannotCreateDirectory, packDir
+                                                                .toAbsolutePath()));
+                        }
+                }
 
-		if (finalPack.exists()) {
+		if (Files.exists(finalPack)) {
 			// If the pack is already present we should never replace it.
 			//
 			cleanupTemporaryFiles();
@@ -508,9 +571,13 @@ public class ObjectDirectoryPackParser extends PackParser {
 		} catch (IOException e) {
 			cleanupTemporaryFiles();
 			keep.unlock();
-			if (!finalPack.delete())
-				finalPack.deleteOnExit();
-			throw new IOException(MessageFormat.format(
+                        try {
+                            Files.deleteIfExists(finalPack);
+                        } catch (IOException ex) {
+                            // finalPack.deleteOnExit();
+                        }
+
+                        throw new IOException(MessageFormat.format(
 					JGitText.get().cannotMoveIndexTo, finalIdx), e);
 		}
 
@@ -518,10 +585,12 @@ public class ObjectDirectoryPackParser extends PackParser {
 			newPack = db.openPack(finalPack);
 		} catch (IOException err) {
 			keep.unlock();
-			if (finalPack.exists())
+			if (Files.exists(finalPack)) {
 				FileUtils.delete(finalPack);
-			if (finalIdx.exists())
+                        }
+			if (Files.exists(finalIdx)) {
 				FileUtils.delete(finalIdx);
+                        }
 			throw err;
 		}
 

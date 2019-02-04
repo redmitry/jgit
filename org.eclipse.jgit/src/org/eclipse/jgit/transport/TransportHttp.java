@@ -689,7 +689,7 @@ public class TransportHttp extends HttpTransport implements WalkTransport,
 		if (local != null) {
 			items.forRepo = new CredentialItem.YesNoType(
 					MessageFormat.format(JGitText.get().sslTrustForRepo,
-					local.getDirectory()));
+					local.getDirectoryPath()));
 		}
 		items.always = new CredentialItem.YesNoType(
 				JGitText.get().sslTrustAlways);
@@ -723,7 +723,7 @@ public class TransportHttp extends HttpTransport implements WalkTransport,
 		} catch (IOException | ConfigInvalidException e) {
 			// Log it, but otherwise ignore here.
 			LOG.error(MessageFormat.format(JGitText.get().userConfigFileInvalid,
-					userConfig.getFile().getAbsolutePath(), e));
+					userConfig.getFilePath().toAbsolutePath(), e));
 		}
 	}
 

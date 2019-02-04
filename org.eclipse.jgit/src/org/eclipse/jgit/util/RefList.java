@@ -353,7 +353,7 @@ public class RefList<T extends Ref> implements Iterable<Ref> {
 		 *
 		 * @param capacity
 		 *            the new capacity; if zero or negative, behavior is the same as
-		 *            {@link #Builder()}.
+		 *            {@link #RefList.Builder()}.
 		 */
 		public Builder(int capacity) {
 			list = new Ref[Math.max(capacity, 16)];

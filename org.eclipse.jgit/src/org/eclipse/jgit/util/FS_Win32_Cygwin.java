@@ -43,12 +43,14 @@
 
 package org.eclipse.jgit.util;
 
+import java.io.File;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.File;
 import java.io.PrintStream;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
@@ -88,9 +90,9 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 				});
 		if (path == null)
 			return false;
-		File found = FS.searchPath(path, "cygpath.exe"); //$NON-NLS-1$
+		Path found = FS.searchPath(path, "cygpath.exe"); //$NON-NLS-1$
 		if (found != null)
-			cygpath = found.getPath();
+			cygpath = found.toString();
 		return cygpath != null;
 	}
 
@@ -120,6 +122,11 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 	/** {@inheritDoc} */
 	@Override
 	public File resolve(File dir, String pn) {
+                return resolve(dir != null ? dir.toPath() : null, pn).toFile();
+	}
+        
+        @Override
+	public Path resolve(Path dir, String pn) {
 		String useCygPath = System.getProperty("jgit.usecygpath"); //$NON-NLS-1$
 		if (useCygPath != null && useCygPath.equals("true")) { //$NON-NLS-1$
 			String w;
@@ -132,15 +139,15 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 				return null;
 			}
 			if (!StringUtils.isEmptyOrNull(w)) {
-				return new File(w);
+				return Paths.get(w);
 			}
 		}
 		return super.resolve(dir, pn);
 	}
-
+        
 	/** {@inheritDoc} */
 	@Override
-	protected File userHomeImpl() {
+	protected Path userHomeImpl() {
 		final String home = AccessController
 				.doPrivileged(new PrivilegedAction<String>() {
 					@Override
@@ -150,7 +157,7 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 				});
 		if (home == null || home.length() == 0)
 			return super.userHomeImpl();
-		return resolve(new File("."), home); //$NON-NLS-1$
+		return resolve(Paths.get("."), home); //$NON-NLS-1$
 	}
 
 	/** {@inheritDoc} */
@@ -171,7 +178,7 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 	@Override
 	public String relativize(String base, String other) {
 		final String relativized = super.relativize(base, other);
-		return relativized.replace(File.separatorChar, '/');
+		return relativized.replace(FileSystems.getDefault().getSeparator(), "/");
 	}
 
 	/** {@inheritDoc} */
@@ -186,14 +193,20 @@ public class FS_Win32_Cygwin extends FS_Win32 {
 	/** {@inheritDoc} */
 	@Override
 	public File findHook(Repository repository, String hookName) {
-		final File gitdir = repository.getDirectory();
+               return findHookPath(repository, hookName).toFile();
+	}
+        
+	/** {@inheritDoc} */
+	@Override
+	public Path findHookPath(Repository repository, String hookName) {
+		final Path gitdir = repository.getDirectoryPath();
 		if (gitdir == null) {
 			return null;
 		}
-		final Path hookPath = gitdir.toPath().resolve(Constants.HOOKS)
-				.resolve(hookName);
+		final Path hookPath = gitdir.resolve(Constants.HOOKS)
+				            .resolve(hookName);
 		if (Files.isExecutable(hookPath))
-			return hookPath.toFile();
+			return hookPath;
 		return null;
 	}
 }

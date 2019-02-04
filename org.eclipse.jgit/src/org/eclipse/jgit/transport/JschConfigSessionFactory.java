@@ -53,9 +53,6 @@ package org.eclipse.jgit.transport;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -82,6 +79,10 @@ import com.jcraft.jsch.HostKeyRepository;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 
 /**
  * The base session factory that loads known hosts and private keys from
@@ -383,11 +384,11 @@ public abstract class JschConfigSessionFactory extends SshSessionFactory {
 				byIdentityFile.put((String) name, defaultJSch);
 		}
 
-		final File identityFile = hc.getIdentityFile();
+		final Path identityFile = hc.getIdentityFilePath();
 		if (identityFile == null)
 			return defaultJSch;
 
-		final String identityKey = identityFile.getAbsolutePath();
+		final String identityKey = identityFile.toAbsolutePath().toString();
 		JSch jsch = byIdentityFile.get(identityKey);
 		if (jsch == null) {
 			jsch = new JSch();
@@ -423,13 +424,13 @@ public abstract class JschConfigSessionFactory extends SshSessionFactory {
 	}
 
 	private static void knownHosts(JSch sch, FS fs) throws JSchException {
-		final File home = fs.userHome();
+		final Path home = fs.userHomePath();
 		if (home == null)
 			return;
-		final File known_hosts = new File(new File(home, ".ssh"), "known_hosts"); //$NON-NLS-1$ //$NON-NLS-2$
-		try (FileInputStream in = new FileInputStream(known_hosts)) {
+		final Path known_hosts = home.resolve(".ssh").resolve("known_hosts"); //$NON-NLS-1$ //$NON-NLS-2$
+		try (InputStream in = Files.newInputStream(known_hosts)) {
 			sch.setKnownHosts(in);
-		} catch (FileNotFoundException none) {
+		} catch (NoSuchFileException none) {
 			// Oh well. They don't have a known hosts in home.
 		} catch (IOException err) {
 			// Oh well. They don't have a known hosts in home.
@@ -437,21 +438,21 @@ public abstract class JschConfigSessionFactory extends SshSessionFactory {
 	}
 
 	private static void identities(JSch sch, FS fs) {
-		final File home = fs.userHome();
+		final Path home = fs.userHomePath();
 		if (home == null)
 			return;
-		final File sshdir = new File(home, ".ssh"); //$NON-NLS-1$
-		if (sshdir.isDirectory()) {
-			loadIdentity(sch, new File(sshdir, "identity")); //$NON-NLS-1$
-			loadIdentity(sch, new File(sshdir, "id_rsa")); //$NON-NLS-1$
-			loadIdentity(sch, new File(sshdir, "id_dsa")); //$NON-NLS-1$
+		final Path sshdir = home.resolve(".ssh"); //$NON-NLS-1$
+		if (Files.isDirectory(sshdir)) {
+			loadIdentity(sch, sshdir.resolve("identity")); //$NON-NLS-1$
+			loadIdentity(sch, sshdir.resolve("id_rsa")); //$NON-NLS-1$
+			loadIdentity(sch, sshdir.resolve("id_dsa")); //$NON-NLS-1$
 		}
 	}
 
-	private static void loadIdentity(JSch sch, File priv) {
-		if (priv.isFile()) {
+	private static void loadIdentity(JSch sch, Path priv) {
+		if (Files.isRegularFile(priv)) {
 			try {
-				sch.addIdentity(priv.getAbsolutePath());
+				sch.addIdentity(priv.toAbsolutePath().toString());
 			} catch (JSchException e) {
 				// Instead, pretend the key doesn't exist.
 			}

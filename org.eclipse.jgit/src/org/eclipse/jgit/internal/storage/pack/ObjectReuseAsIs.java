@@ -91,7 +91,7 @@ public interface ObjectReuseAsIs {
 	 * the output stream.
 	 * <p>
 	 * If the implementation returns CachedPack from
-	 * {@link #getCachedPacksAndUpdate(BitmapBuilder)} it must consider the
+	 * {@link #getCachedPacksAndUpdate(org.eclipse.jgit.lib.BitmapIndex.BitmapBuilder)} it must consider the
 	 * representation of any object that is stored in any of the offered
 	 * CachedPacks. PackWriter relies on this behavior to prune duplicate
 	 * objects out of the pack stream when it selects a CachedPack and the

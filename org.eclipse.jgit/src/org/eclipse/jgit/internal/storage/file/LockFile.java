@@ -44,20 +44,22 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
+import java.io.File;
 import static org.eclipse.jgit.lib.Constants.LOCK_SUFFIX;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
 import java.text.MessageFormat;
+import java.time.Instant;
 
 import org.eclipse.jgit.internal.JGitText;
 import org.eclipse.jgit.lib.Constants;
@@ -82,26 +84,39 @@ public class LockFile {
 	private final static Logger LOG = LoggerFactory.getLogger(LockFile.class);
 
 	/**
-	 * Unlock the given file.
-	 * <p>
-	 * This method can be used for recovering from a thrown
-	 * {@link org.eclipse.jgit.errors.LockFailedException} . This method does
-	 * not validate that the lock is or is not currently held before attempting
-	 * to unlock it.
+	 * @deprecated use {@link #unlock(Path)}
 	 *
 	 * @param file
 	 *            a {@link java.io.File} object.
 	 * @return true if unlocked, false if unlocking failed
 	 */
 	public static boolean unlock(File file) {
-		final File lockFile = getLockFile(file);
-		final int flags = FileUtils.RETRY | FileUtils.SKIP_MISSING;
+            return unlock(file != null ? file.toPath() : null);
+	}
+
+	/**
+	 * Unlock the given file.
+	 * <p>
+	 * This method can be used for recovering from a thrown
+	 * {@link org.eclipse.jgit.errors.LockFailedException} . This method does
+	 * not validate that the lock is or is not currently held before attempting
+	 * to unlock it.
+	 *</p>
+         * 
+	 * @param file
+	 *            a {@link java.io.File} object.
+	 * @return true if unlocked, false if unlocking failed
+	 */
+	public static boolean unlock(Path file) {
+		final Path lockFile = getLockFile(file);
+                final int flags = FileUtils.RETRY | FileUtils.SKIP_MISSING;
+                
 		try {
-			FileUtils.delete(lockFile, flags);
+                    FileUtils.delete(lockFile, flags);
 		} catch (IOException ignored) {
 			// Ignore and return whether lock file still exists
 		}
-		return !lockFile.exists();
+		return !Files.exists(lockFile);
 	}
 
 	/**
@@ -110,26 +125,18 @@ public class LockFile {
 	 * @param file
 	 * @return lock file
 	 */
-	static File getLockFile(File file) {
-		return new File(file.getParentFile(),
-				file.getName() + LOCK_SUFFIX);
+
+	static Path getLockFile(Path file) {
+            return file.resolveSibling(file.getFileName().toString() + LOCK_SUFFIX);
 	}
 
-	/** Filter to skip over active lock files when listing a directory. */
-	static final FilenameFilter FILTER = new FilenameFilter() {
-		@Override
-		public boolean accept(File dir, String name) {
-			return !name.endsWith(LOCK_SUFFIX);
-		}
-	};
+	private final Path ref;
 
-	private final File ref;
-
-	private final File lck;
+	private final Path lck;
 
 	private boolean haveLck;
 
-	FileOutputStream os;
+	SeekableByteChannel os;
 
 	private boolean needSnapshot;
 
@@ -140,16 +147,26 @@ public class LockFile {
 	private LockToken token;
 
 	/**
-	 * Create a new lock for any file.
+	 * @deprecated use {@link #LockFile(Path)}
 	 *
 	 * @param f
 	 *            the file that will be locked.
 	 */
 	public LockFile(File f) {
+                this(f != null ? f.toPath() : null);
+	}
+
+	/**
+	 * Create a new lock for any file.
+	 *
+	 * @param f
+	 *            the file that will be locked.
+	 */
+	public LockFile(Path f) {
 		ref = f;
 		lck = getLockFile(ref);
 	}
-
+        
 	/**
 	 * Try to establish the lock.
 	 *
@@ -160,12 +177,14 @@ public class LockFile {
 	 *             does not hold the lock.
 	 */
 	public boolean lock() throws IOException {
-		FileUtils.mkdirs(lck.getParentFile(), true);
+                FileUtils.mkdirs(lck.getParent(), true);
 		token = FS.DETECTED.createNewFileAtomic(lck);
 		if (token.isCreated()) {
 			haveLck = true;
 			try {
-				os = new FileOutputStream(lck);
+				os = Files.newByteChannel(lck, 
+                                        StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
 			} catch (IOException ioe) {
 				unlock();
 				throw ioe;
@@ -213,39 +232,17 @@ public class LockFile {
 	 */
 	public void copyCurrentContent() throws IOException {
 		requireLock();
-		try {
-			try (FileInputStream fis = new FileInputStream(ref)) {
-				if (fsync) {
-					FileChannel in = fis.getChannel();
-					long pos = 0;
-					long cnt = in.size();
-					while (0 < cnt) {
-						long r = os.getChannel().transferFrom(in, pos, cnt);
-						pos += r;
-						cnt -= r;
-					}
-				} else {
-					final byte[] buf = new byte[2048];
-					int r;
-					while ((r = fis.read(buf)) >= 0)
-						os.write(buf, 0, r);
-				}
-			}
-		} catch (FileNotFoundException fnfe) {
-			if (ref.exists()) {
+		try (OutputStream out = Channels.newOutputStream(os)) {
+                        Files.copy(ref, out);
+		} catch (NoSuchFileException fnfe) {
+			if (Files.exists(ref)) {
 				unlock();
 				throw fnfe;
 			}
 			// Don't worry about a file that doesn't exist yet, it
 			// conceptually has no current content to copy.
 			//
-		} catch (IOException ioe) {
-			unlock();
-			throw ioe;
-		} catch (RuntimeException ioe) {
-			unlock();
-			throw ioe;
-		} catch (Error ioe) {
+		} catch (IOException | RuntimeException | Error ioe) {
 			unlock();
 			throw ioe;
 		}
@@ -288,15 +285,10 @@ public class LockFile {
 	public void write(byte[] content) throws IOException {
 		requireLock();
 		try {
-			if (fsync) {
-				FileChannel fc = os.getChannel();
-				ByteBuffer buf = ByteBuffer.wrap(content);
-				while (0 < buf.remaining())
-					fc.write(buf);
-				fc.force(true);
-			} else {
-				os.write(content);
-			}
+                        ByteBuffer buf = ByteBuffer.wrap(content);
+                        while (buf.hasRemaining()) {
+                                os.write(buf);
+                        }
 			os.close();
 			os = null;
 		} catch (IOException ioe) {
@@ -323,11 +315,7 @@ public class LockFile {
 	public OutputStream getOutputStream() {
 		requireLock();
 
-		final OutputStream out;
-		if (fsync)
-			out = Channels.newOutputStream(os.getChannel());
-		else
-			out = os;
+		final OutputStream out = Channels.newOutputStream(os);
 
 		return new OutputStream() {
 			@Override
@@ -349,8 +337,6 @@ public class LockFile {
 			@Override
 			public void close() throws IOException {
 				try {
-					if (fsync)
-						os.getChannel().force(true);
 					out.close();
 					os = null;
 				} catch (IOException ioe) {
@@ -424,8 +410,12 @@ public class LockFile {
 		FileSnapshot n = FileSnapshot.save(lck);
 		while (o.equals(n)) {
 			Thread.sleep(25 /* milliseconds */);
-			lck.setLastModified(System.currentTimeMillis());
-			n = FileSnapshot.save(lck);
+                        try {
+                            Files.setLastModifiedTime(lck, FileTime.from(Instant.now()));
+                            n = FileSnapshot.save(lck);
+                        } catch(IOException ex) {
+                            
+                        }
 		}
 	}
 
@@ -517,7 +507,7 @@ public class LockFile {
 		if (haveLck) {
 			haveLck = false;
 			try {
-				FileUtils.delete(lck, FileUtils.RETRY);
+                                FileUtils.delete(lck, FileUtils.RETRY);
 			} catch (IOException e) {
 				LOG.error(MessageFormat
 						.format(JGitText.get().unlockLockFileFailed, lck), e);

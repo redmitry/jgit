@@ -62,7 +62,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testEmpty() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		try {
 			b.close();
 			assertEquals(0, b.length());
@@ -77,7 +77,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testOneByte() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte test = (byte) new TestRng(getName()).nextInt();
 		try {
 			b.write(test);
@@ -103,7 +103,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testOneBlock_BulkWrite() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.Block.SZ);
 		try {
@@ -133,7 +133,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testOneBlockAndHalf_BulkWrite() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.Block.SZ * 3 / 2);
 		try {
@@ -163,7 +163,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testOneBlockAndHalf_SingleWrite() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.Block.SZ * 3 / 2);
 		try {
@@ -191,7 +191,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testOneBlockAndHalf_Copy() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.Block.SZ * 3 / 2);
 		try {
@@ -220,7 +220,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testLarge_SingleWrite() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.DEFAULT_IN_CORE_LIMIT * 3);
 		try {
@@ -260,7 +260,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testInCoreLimit_SwitchOnAppendByte() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.DEFAULT_IN_CORE_LIMIT + 1);
 		try {
@@ -288,7 +288,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testInCoreLimit_SwitchBeforeAppendByte() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.DEFAULT_IN_CORE_LIMIT * 3);
 		try {
@@ -316,7 +316,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testInCoreLimit_SwitchOnCopy() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final byte[] test = new TestRng(getName())
 				.nextBytes(TemporaryBuffer.DEFAULT_IN_CORE_LIMIT * 2);
 		try {
@@ -347,7 +347,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testDestroyWhileOpen() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		try {
 			b.write(new TestRng(getName())
 					.nextBytes(TemporaryBuffer.DEFAULT_IN_CORE_LIMIT * 2));
@@ -359,7 +359,7 @@ public class TemporaryBufferTest {
 	@Test
 	public void testRandomWrites() throws IOException {
 		@SuppressWarnings("resource") // Buffer is explicitly destroyed in finally block
-		final TemporaryBuffer b = new TemporaryBuffer.LocalFile(null);
+		final TemporaryBuffer b = new TemporaryBuffer.LocalFile();
 		final TestRng rng = new TestRng(getName());
 		final int max = TemporaryBuffer.DEFAULT_IN_CORE_LIMIT * 2;
 		final byte[] expect = new byte[max];

@@ -117,8 +117,8 @@ public class KetchLeaderCache {
 			return dfs.getDescription().getRepositoryName();
 		}
 
-		if (repo.getDirectory() != null) {
-			return repo.getDirectory().toURI().toString();
+		if (repo != null && repo.getDirectoryPath() != null) {
+			return repo.getDirectoryPath().toUri().toString();
 		}
 
 		throw new IllegalArgumentException();

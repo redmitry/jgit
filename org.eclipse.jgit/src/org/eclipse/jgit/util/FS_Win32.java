@@ -51,6 +51,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -113,10 +114,21 @@ public class FS_Win32 extends FS {
 
 	/** {@inheritDoc} */
 	@Override
+	public boolean canExecute(Path f) {
+		return false;
+	}
+        
+	/** {@inheritDoc} */
+	@Override
 	public boolean setExecute(File f, boolean canExec) {
 		return false;
 	}
 
+        @Override
+        public boolean setExecute(Path f, boolean canExec) {
+                return false;
+        }
+    
 	/** {@inheritDoc} */
 	@Override
 	public boolean isCaseSensitive() {
@@ -132,26 +144,31 @@ public class FS_Win32 extends FS {
 	/** {@inheritDoc} */
 	@Override
 	public Entry[] list(File directory, FileModeStrategy fileModeStrategy) {
+                return list(directory != null ? directory.toPath() : null, fileModeStrategy);
+	}
+
+	/** {@inheritDoc} */
+	@Override
+	public Entry[] list(Path directory, FileModeStrategy fileModeStrategy) {
 		List<Entry> result = new ArrayList<>();
 		FS fs = this;
 		boolean checkExecutable = fs.supportsExecute();
 		try {
-			Files.walkFileTree(directory.toPath(),
+			Files.walkFileTree(directory,
 					EnumSet.noneOf(FileVisitOption.class), 1,
 					new SimpleFileVisitor<Path>() {
 						@Override
 						public FileVisitResult visitFile(Path file,
 								BasicFileAttributes attrs) throws IOException {
-							File f = file.toFile();
-							FS.Attributes attributes = new FS.Attributes(fs, f,
+							FS.Attributes attributes = new FS.Attributes(fs, file,
 									true, attrs.isDirectory(),
-									checkExecutable && f.canExecute(),
+									checkExecutable && Files.isExecutable(file),
 									attrs.isSymbolicLink(),
 									attrs.isRegularFile(),
 									attrs.creationTime().toMillis(),
 									attrs.lastModifiedTime().toMillis(),
 									attrs.size());
-							result.add(new FileEntry(f, fs, attributes,
+							result.add(new FileEntry(file, fs, attributes,
 									fileModeStrategy));
 							return FileVisitResult.CONTINUE;
 						}
@@ -174,9 +191,9 @@ public class FS_Win32 extends FS {
 
 	/** {@inheritDoc} */
 	@Override
-	protected File discoverGitExe() {
+	protected Path discoverGitExe() {
 		String path = SystemReader.getInstance().getenv("PATH"); //$NON-NLS-1$
-		File gitExe = searchPath(path, "git.exe", "git.cmd"); //$NON-NLS-1$ //$NON-NLS-2$
+		Path gitExe = searchPath(path, "git.exe", "git.cmd"); //$NON-NLS-1$ //$NON-NLS-2$
 
 		if (gitExe == null) {
 			if (searchPath(path, "bash.exe") != null) { //$NON-NLS-1$
@@ -184,7 +201,7 @@ public class FS_Win32 extends FS {
 				// If bash is in $PATH, git should also be in $PATH.
 				String w;
 				try {
-					w = readPipe(userHome(),
+					w = readPipe(userHomePath(),
 						new String[]{"bash", "--login", "-c", "which git"}, // //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 						Charset.defaultCharset().name());
 				} catch (CommandFailedException e) {
@@ -193,7 +210,7 @@ public class FS_Win32 extends FS {
 				}
 				if (!StringUtils.isEmptyOrNull(w)) {
 					// The path may be in cygwin/msys notation so resolve it right away
-					gitExe = resolve(null, w);
+					gitExe = resolve((Path)null, w);
 				}
 			}
 		}
@@ -203,20 +220,20 @@ public class FS_Win32 extends FS {
 
 	/** {@inheritDoc} */
 	@Override
-	protected File userHomeImpl() {
+	protected Path userHomeImpl() {
 		String home = SystemReader.getInstance().getenv("HOME"); //$NON-NLS-1$
 		if (home != null)
-			return resolve(null, home);
+			return resolve((Path)null, home);
 		String homeDrive = SystemReader.getInstance().getenv("HOMEDRIVE"); //$NON-NLS-1$
 		if (homeDrive != null) {
 			String homePath = SystemReader.getInstance().getenv("HOMEPATH"); //$NON-NLS-1$
 			if (homePath != null)
-				return new File(homeDrive, homePath);
+				return Paths.get(homeDrive, homePath);
 		}
 
 		String homeShare = SystemReader.getInstance().getenv("HOMESHARE"); //$NON-NLS-1$
 		if (homeShare != null)
-			return new File(homeShare);
+			return Paths.get(homeShare);
 
 		return super.userHomeImpl();
 	}
@@ -243,13 +260,13 @@ public class FS_Win32 extends FS {
 	}
 
 	private void detectSymlinkSupport() {
-		File tempFile = null;
+		Path tempFile = null;
 		try {
-			tempFile = File.createTempFile("tempsymlinktarget", ""); //$NON-NLS-1$ //$NON-NLS-2$
-			File linkName = new File(tempFile.getParentFile(), "tempsymlink"); //$NON-NLS-1$
-			createSymLink(linkName, tempFile.getPath());
+			tempFile = Files.createTempFile("tempsymlinktarget", ""); //$NON-NLS-1$ //$NON-NLS-2$
+			Path linkName = tempFile.resolveSibling("tempsymlink"); //$NON-NLS-1$
+			createSymLink(linkName, tempFile.toString());
 			supportSymlinks = Boolean.TRUE;
-			linkName.delete();
+                        Files.delete(linkName);
 		} catch (IOException | UnsupportedOperationException
 				| InternalError e) {
 			supportSymlinks = Boolean.FALSE;
@@ -266,6 +283,12 @@ public class FS_Win32 extends FS {
 	/** {@inheritDoc} */
 	@Override
 	public Attributes getAttributes(File path) {
+		return FileUtils.getFileAttributesBasic(this, path != null ? path.toPath() : null);
+	}
+        
+	/** {@inheritDoc} */
+	@Override
+	public Attributes getAttributes(Path path) {
 		return FileUtils.getFileAttributesBasic(this, path);
 	}
 }

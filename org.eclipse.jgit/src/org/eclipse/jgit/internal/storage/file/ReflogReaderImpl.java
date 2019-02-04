@@ -43,9 +43,11 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -54,21 +56,22 @@ import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ReflogEntry;
 import org.eclipse.jgit.lib.ReflogReader;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.util.IO;
 import org.eclipse.jgit.util.RawParseUtils;
 
 /**
  * Utility for reading reflog entries
  */
 class ReflogReaderImpl implements ReflogReader {
-	private File logName;
+	private Path logName;
 
 	/**
 	 * @param db
 	 * @param refname
 	 */
 	ReflogReaderImpl(Repository db, String refname) {
-		logName = new File(db.getDirectory(), Constants.LOGS + '/' + refname);
+                final Path dir = db.getDirectoryPath();
+                logName = dir != null ? dir.resolve(Constants.LOGS + '/' + refname) 
+                                      : Paths.get(Constants.LOGS + '/' + refname);
 	}
 
 	/* (non-Javadoc)
@@ -100,9 +103,9 @@ class ReflogReaderImpl implements ReflogReader {
 
 		final byte[] log;
 		try {
-			log = IO.readFully(logName);
-		} catch (FileNotFoundException e) {
-			if (logName.exists()) {
+                        log = Files.readAllBytes(logName);
+		} catch (NoSuchFileException e) {
+			if (Files.exists(logName)) {
 				throw e;
 			}
 			return null;
@@ -127,9 +130,9 @@ class ReflogReaderImpl implements ReflogReader {
 	public List<ReflogEntry> getReverseEntries(int max) throws IOException {
 		final byte[] log;
 		try {
-			log = IO.readFully(logName);
-		} catch (FileNotFoundException e) {
-			if (logName.exists()) {
+                        log = Files.readAllBytes(logName);
+		} catch (NoSuchFileException e) {
+			if (Files.exists(logName)) {
 				throw e;
 			}
 			return Collections.emptyList();

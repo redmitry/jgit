@@ -51,10 +51,12 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.text.MessageFormat;
@@ -87,7 +89,6 @@ import org.eclipse.jgit.util.IO;
 import org.eclipse.jgit.util.MutableInteger;
 import org.eclipse.jgit.util.NB;
 import org.eclipse.jgit.util.TemporaryBuffer;
-import org.eclipse.jgit.util.io.SilentFileInputStream;
 
 /**
  * Support for the Git dircache (aka index file).
@@ -147,7 +148,7 @@ public class DirCache {
 	 *         memory).
 	 */
 	public static DirCache newInCore() {
-		return new DirCache(null, null);
+		return new DirCache((Path)null, null);
 	}
 
 	/**
@@ -191,9 +192,30 @@ public class DirCache {
 	 */
 	public static DirCache read(Repository repository)
 			throws CorruptObjectException, IOException {
-		final DirCache c = read(repository.getIndexFile(), repository.getFS());
+		final DirCache c = read(repository.getIndexFilePath(), repository.getFS());
 		c.repository = repository;
 		return c;
+	}
+
+	/**
+	 * @deprecated use {@link #read(Path, FS)}
+	 *
+	 * @param indexLocation
+	 *            location of the index file on disk.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @return a cache representing the contents of the specified index file (if
+	 *         it exists) or an empty cache if the file does not exist.
+	 * @throws java.io.IOException
+	 *             the index file is present but could not be read.
+	 * @throws org.eclipse.jgit.errors.CorruptObjectException
+	 *             the index file is using a format or extension that this
+	 *             library does not support.
+	 */
+	public static DirCache read(File indexLocation, FS fs)
+			throws CorruptObjectException, IOException {
+                        return read(indexLocation != null ? indexLocation.toPath() : null, fs);
 	}
 
 	/**
@@ -216,13 +238,35 @@ public class DirCache {
 	 *             the index file is using a format or extension that this
 	 *             library does not support.
 	 */
-	public static DirCache read(File indexLocation, FS fs)
+	public static DirCache read(Path indexLocation, FS fs)
 			throws CorruptObjectException, IOException {
 		final DirCache c = new DirCache(indexLocation, fs);
 		c.read();
 		return c;
 	}
 
+	/**
+	 * @deprecated use {@link #lock(Path, FS)}
+	 *
+	 * @param indexLocation
+	 *            location of the index file on disk.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @return a cache representing the contents of the specified index file (if
+	 *         it exists) or an empty cache if the file does not exist.
+	 * @throws java.io.IOException
+	 *             the index file is present but could not be read, or the lock
+	 *             could not be obtained.
+	 * @throws org.eclipse.jgit.errors.CorruptObjectException
+	 *             the index file is using a format or extension that this
+	 *             library does not support.
+	 */
+	public static DirCache lock(File indexLocation, FS fs)
+			throws CorruptObjectException, IOException {
+                return lock(indexLocation != null ? indexLocation.toPath() : null, fs);
+	}
+        
 	/**
 	 * Create a new in-core index representation, lock it, and read from disk.
 	 * <p>
@@ -245,7 +289,7 @@ public class DirCache {
 	 *             the index file is using a format or extension that this
 	 *             library does not support.
 	 */
-	public static DirCache lock(File indexLocation, FS fs)
+	public static DirCache lock(Path indexLocation, FS fs)
 			throws CorruptObjectException, IOException {
 		final DirCache c = new DirCache(indexLocation, fs);
 		if (!c.lock())
@@ -292,12 +336,38 @@ public class DirCache {
 	public static DirCache lock(final Repository repository,
 			final IndexChangedListener indexChangedListener)
 			throws CorruptObjectException, IOException {
-		DirCache c = lock(repository.getIndexFile(), repository.getFS(),
+		DirCache c = lock(repository.getIndexFilePath(), repository.getFS(),
 				indexChangedListener);
 		c.repository = repository;
 		return c;
 	}
 
+	/**
+	 * @deprecated use {@link #lock(Path, FS, IndexChangedListener)}
+	 *
+	 * @param indexLocation
+	 *            location of the index file on disk.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 * @param indexChangedListener
+	 *            listener to be informed when DirCache is committed
+	 * @return a cache representing the contents of the specified index file (if
+	 *         it exists) or an empty cache if the file does not exist.
+	 * @throws java.io.IOException
+	 *             the index file is present but could not be read, or the lock
+	 *             could not be obtained.
+	 * @throws org.eclipse.jgit.errors.CorruptObjectException
+	 *             the index file is using a format or extension that this
+	 *             library does not support.
+	 */
+	public static DirCache lock(final File indexLocation, final FS fs,
+			IndexChangedListener indexChangedListener)
+			throws CorruptObjectException,
+			IOException {
+                return lock(indexLocation != null ? indexLocation.toPath() : null, fs, indexChangedListener);
+	}
+        
 	/**
 	 * Create a new in-core index representation, lock it, and read from disk.
 	 * <p>
@@ -322,7 +392,7 @@ public class DirCache {
 	 *             the index file is using a format or extension that this
 	 *             library does not support.
 	 */
-	public static DirCache lock(final File indexLocation, final FS fs,
+	public static DirCache lock(final Path indexLocation, final FS fs,
 			IndexChangedListener indexChangedListener)
 			throws CorruptObjectException,
 			IOException {
@@ -332,7 +402,7 @@ public class DirCache {
 	}
 
 	/** Location of the current version of the index file. */
-	private final File liveFile;
+	private final Path liveFile;
 
 	/** Individual file index entries, sorted by path name. */
 	private DirCacheEntry[] sortedEntries;
@@ -362,6 +432,19 @@ public class DirCache {
 	private Repository repository;
 
 	/**
+	 * @deprecated use {@link #DirCache(Path, FS)}
+	 *
+	 * @param indexLocation
+	 *            location of the index file on disk.
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 */
+	public DirCache(File indexLocation, FS fs) {
+                this(indexLocation != null ? indexLocation.toPath() : null, fs);
+	}
+
+	/**
 	 * Create a new in-core index representation.
 	 * <p>
 	 * The new index will be empty. Callers may wish to read from the on disk
@@ -373,11 +456,11 @@ public class DirCache {
 	 *            the file system abstraction which will be necessary to perform
 	 *            certain file system operations.
 	 */
-	public DirCache(File indexLocation, FS fs) {
+
+	public DirCache(Path indexLocation, FS fs) {
 		liveFile = indexLocation;
 		clear();
 	}
-
 	/**
 	 * Create a new builder to update this cache.
 	 * <p>
@@ -427,19 +510,18 @@ public class DirCache {
 	public void read() throws IOException, CorruptObjectException {
 		if (liveFile == null)
 			throw new IOException(JGitText.get().dirCacheDoesNotHaveABackingFile);
-		if (!liveFile.exists())
+		if (!Files.exists(liveFile))
 			clear();
 		else if (snapshot == null || snapshot.isModified(liveFile)) {
-			try (SilentFileInputStream inStream = new SilentFileInputStream(
-					liveFile)) {
+			try (InputStream inStream = new BufferedInputStream(Files.newInputStream(liveFile))) {
 				clear();
 				readFrom(inStream);
-			} catch (FileNotFoundException fnfe) {
-				if (liveFile.exists()) {
+			} catch (NoSuchFileException fnfe) {
+				if (Files.exists(liveFile)) {
 					// Panic: the index file exists but we can't read it
 					throw new IndexReadException(
 							MessageFormat.format(JGitText.get().cannotReadIndex,
-									liveFile.getAbsolutePath(), fnfe));
+									liveFile.toAbsolutePath(), fnfe));
 				}
 				// Someone must have deleted it between our exists test
 				// and actually opening the path. That's fine, its empty.
@@ -457,7 +539,7 @@ public class DirCache {
 	 * @throws java.io.IOException
 	 */
 	public boolean isOutdated() throws IOException {
-		if (liveFile == null || !liveFile.exists())
+		if (liveFile == null || !Files.exists(liveFile))
 			return false;
 		return snapshot == null || snapshot.isModified(liveFile);
 	}
@@ -473,9 +555,8 @@ public class DirCache {
 		readIndexChecksum = NO_CHECKSUM;
 	}
 
-	private void readFrom(InputStream inStream) throws IOException,
+	private void readFrom(InputStream in) throws IOException,
 			CorruptObjectException {
-		final BufferedInputStream in = new BufferedInputStream(inStream);
 		final MessageDigest md = Constants.newMessageDigest();
 
 		// Read the index header and verify we understand it.
@@ -491,7 +572,7 @@ public class DirCache {
 			extended = true;
 		else if (ver != 2)
 			throw new CorruptObjectException(MessageFormat.format(
-					JGitText.get().unknownDIRCVersion, Integer.valueOf(ver)));
+					JGitText.get().unknownDIRCVersion, ver));
 		entryCnt = NB.decodeInt32(hdr, 8);
 		if (entryCnt < 0)
 			throw new CorruptObjectException(JGitText.get().DIRCHasTooManyEntries);
@@ -635,7 +716,7 @@ public class DirCache {
 		requireLocked(tmp);
 		try (OutputStream o = tmp.getOutputStream();
 				OutputStream bo = new BufferedOutputStream(o)) {
-			writeTo(liveFile.getParentFile(), bo);
+			writeTo(liveFile.getParent(), bo);
 		} catch (IOException err) {
 			tmp.unlock();
 			throw err;
@@ -648,7 +729,7 @@ public class DirCache {
 		}
 	}
 
-	void writeTo(File dir, OutputStream os) throws IOException {
+	void writeTo(Path dir, OutputStream os) throws IOException {
 		final MessageDigest foot = Constants.newMessageDigest();
 		final DigestOutputStream dos = new DigestOutputStream(os, foot);
 
@@ -753,7 +834,7 @@ public class DirCache {
 			throw new IllegalStateException(JGitText.get().dirCacheIsNotLocked);
 		if (tmp == null)
 			throw new IllegalStateException(MessageFormat.format(JGitText.get().dirCacheFileIsNotLocked
-					, liveFile.getAbsolutePath()));
+					, liveFile.toAbsolutePath()));
 	}
 
 	/**

@@ -46,9 +46,9 @@
 
 package org.eclipse.jgit.transport;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -255,10 +255,10 @@ public class TransportGitSsh extends SshTransport implements PackTransport {
 		private ProcessBuilder createProcess(List<String> args) {
 			ProcessBuilder pb = new ProcessBuilder();
 			pb.command(args);
-			File directory = local != null ? local.getDirectory() : null;
+			Path directory = local != null ? local.getDirectoryPath() : null;
 			if (directory != null) {
 				pb.environment().put(Constants.GIT_DIR_KEY,
-						directory.getPath());
+						directory.toString());
 			}
 			return pb;
 		}

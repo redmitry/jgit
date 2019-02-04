@@ -85,7 +85,7 @@ class RefDirectoryUpdate extends RefUpdate {
 		if (deref)
 			dst = dst.getLeaf();
 		String name = dst.getName();
-		lock = new LockFile(database.fileFor(name));
+		lock = new LockFile(database.filePathFor(name));
 		if (lock.lock()) {
 			dst = database.findRef(name);
 			setOldObjectId(dst != null ? dst.getObjectId() : null);
@@ -149,8 +149,9 @@ class RefDirectoryUpdate extends RefUpdate {
 	/** {@inheritDoc} */
 	@Override
 	protected Result doDelete(Result status) throws IOException {
-		if (getRef().getStorage() != Ref.Storage.NEW)
+		if (getRef().getStorage() != Ref.Storage.NEW) {
 			database.delete(this);
+                }
 		return status;
 	}
 

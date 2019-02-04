@@ -341,7 +341,7 @@ class PackedBatchRefUpdate extends BatchRefUpdate {
 
 				for (ReceiveCommand c : commands) {
 					String name = c.getRefName();
-					LockFile lock = new LockFile(refdb.fileFor(name));
+					LockFile lock = new LockFile(refdb.filePathFor(name));
 					if (locks.put(name, lock) != null) {
 						throw new IOException(
 								MessageFormat.format(JGitText.get().duplicateRef, name));
@@ -440,7 +440,7 @@ class PackedBatchRefUpdate extends BatchRefUpdate {
 
 			if (cmd.getType() == ReceiveCommand.Type.DELETE) {
 				try {
-					RefDirectory.delete(refdb.logFor(name), RefDirectory.levelsIn(name));
+					RefDirectory.delete(refdb.logForPath(name), RefDirectory.levelsIn(name));
 				} catch (IOException e) {
 					// Ignore failures, see below.
 				}

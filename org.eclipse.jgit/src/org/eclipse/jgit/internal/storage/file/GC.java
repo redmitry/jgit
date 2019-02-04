@@ -43,22 +43,22 @@
  */
 package org.eclipse.jgit.internal.storage.file;
 
+import java.io.BufferedOutputStream;
 import static org.eclipse.jgit.internal.storage.pack.PackExt.BITMAP_INDEX;
 import static org.eclipse.jgit.internal.storage.pack.PackExt.INDEX;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 import java.text.ParseException;
 import java.time.Instant;
@@ -371,7 +371,7 @@ public class GC {
 
 			if (!oldPack.shouldBeKept()
 					&& repo.getFS().lastModified(
-							oldPack.getPackFile()) < packExpireDate) {
+							oldPack.getPackFilePath()) < packExpireDate) {
 				oldPack.close();
 				if (shouldLoosen) {
 					loosen(inserter, reader, oldPack, ids);
@@ -384,7 +384,7 @@ public class GC {
 		// rescanning and to detect that certain pack files are now deleted.
 		repo.getObjectDatabase().close();
 	}
-
+        
 	/**
 	 * Deletes old pack file, unless 'preserve-oldpacks' is set, in which case it
 	 * moves the pack file to the preserved directory
@@ -395,14 +395,14 @@ public class GC {
 	 * @param deleteOptions
 	 * @throws IOException
 	 */
-	private void removeOldPack(File packFile, String packName, PackExt ext,
+	private void removeOldPack(Path packFile, String packName, PackExt ext,
 			int deleteOptions) throws IOException {
 		if (pconfig != null && pconfig.isPreserveOldPacks()) {
-			File oldPackDir = repo.getObjectDatabase().getPreservedDirectory();
+			final Path oldPackDir = repo.getObjectDatabase().getPreservedDirectoryPath();
 			FileUtils.mkdir(oldPackDir, true);
 
 			String oldPackName = "pack-" + packName + ".old-" + ext.getExtension();  //$NON-NLS-1$ //$NON-NLS-2$
-			File oldPackFile = new File(oldPackDir, oldPackName);
+			final Path oldPackFile = oldPackDir.resolve(oldPackName);
 			FileUtils.rename(packFile, oldPackFile);
 		} else {
 			FileUtils.delete(packFile, deleteOptions);
@@ -415,7 +415,7 @@ public class GC {
 	private void prunePreserved() {
 		if (pconfig != null && pconfig.isPrunePreserved()) {
 			try {
-				FileUtils.delete(repo.getObjectDatabase().getPreservedDirectory(),
+				FileUtils.delete(repo.getObjectDatabase().getPreservedDirectoryPath(),
 						FileUtils.RECURSIVE | FileUtils.RETRY | FileUtils.SKIP_MISSING);
 			} catch (IOException e) {
 				// Deletion of the preserved pack files failed. Silently return.
@@ -441,7 +441,7 @@ public class GC {
 			int deleteOptions = FileUtils.RETRY | FileUtils.SKIP_MISSING;
 			for (PackExt ext : extensions)
 				if (PackExt.PACK.equals(ext)) {
-					File f = nameFor(packName, "." + ext.getExtension()); //$NON-NLS-1$
+					final Path f = nameFor(packName, "." + ext.getExtension()); //$NON-NLS-1$
 					removeOldPack(f, packName, ext, deleteOptions);
 					break;
 				}
@@ -450,7 +450,7 @@ public class GC {
 			deleteOptions |= FileUtils.IGNORE_ERRORS;
 			for (PackExt ext : extensions) {
 				if (!PackExt.PACK.equals(ext)) {
-					File f = nameFor(packName, "." + ext.getExtension()); //$NON-NLS-1$
+					final Path f = nameFor(packName, "." + ext.getExtension()); //$NON-NLS-1$
 					removeOldPack(f, packName, ext, deleteOptions);
 				}
 			}
@@ -469,50 +469,56 @@ public class GC {
 	public void prunePacked() throws IOException {
 		ObjectDirectory objdb = repo.getObjectDatabase();
 		Collection<PackFile> packs = objdb.getPacks();
-		File objects = repo.getObjectsDirectory();
-		String[] fanout = objects.list();
+		Path objects = repo.getObjectsDirectoryPath();
+                
+                try (Stream<Path> stream = Files.list(objects)) {
+                        String[] fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
 
-		if (fanout != null && fanout.length > 0) {
-			pm.beginTask(JGitText.get().pruneLoosePackedObjects, fanout.length);
-			try {
-				for (String d : fanout) {
-					checkCancelled();
-					pm.update(1);
-					if (d.length() != 2)
-						continue;
-					String[] entries = new File(objects, d).list();
-					if (entries == null)
-						continue;
-					for (String e : entries) {
-						checkCancelled();
-						if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
-							continue;
-						ObjectId id;
-						try {
-							id = ObjectId.fromString(d + e);
-						} catch (IllegalArgumentException notAnObject) {
-							// ignoring the file that does not represent loose
-							// object
-							continue;
-						}
-						boolean found = false;
-						for (PackFile p : packs) {
-							checkCancelled();
-							if (p.hasObject(id)) {
-								found = true;
-								break;
-							}
-						}
-						if (found)
-							FileUtils.delete(objdb.fileFor(id), FileUtils.RETRY
-									| FileUtils.SKIP_MISSING
-									| FileUtils.IGNORE_ERRORS);
-					}
-				}
-			} finally {
-				pm.endTask();
-			}
-		}
+                        if (fanout != null && fanout.length > 0) {
+                                pm.beginTask(JGitText.get().pruneLoosePackedObjects, fanout.length);
+                                try {
+                                        for (String d : fanout) {
+                                                checkCancelled();
+                                                pm.update(1);
+                                                if (d.length() != 2) {
+                                                        continue;
+                                                }
+                                                try (Stream<Path> s = Files.list(objects.resolve(d))) {
+                                                        String[] entries = s.map(x -> x.getFileName().toString()).toArray(String[]::new);
+                                                        if (entries == null)
+                                                                continue;
+                                                        for (String e : entries) {
+                                                                checkCancelled();
+                                                                if (e.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
+                                                                        continue;
+                                                                ObjectId id;
+                                                                try {
+                                                                        id = ObjectId.fromString(d + e);
+                                                                } catch (IllegalArgumentException notAnObject) {
+                                                                        // ignoring the file that does not represent loose
+                                                                        // object
+                                                                        continue;
+                                                                }
+                                                                boolean found = false;
+                                                                for (PackFile p : packs) {
+                                                                        checkCancelled();
+                                                                        if (p.hasObject(id)) {
+                                                                                found = true;
+                                                                                break;
+                                                                        }
+                                                                }
+                                                                if (found)
+                                                                        FileUtils.delete(objdb.filePathFor(id), FileUtils.RETRY
+                                                                                        | FileUtils.SKIP_MISSING
+                                                                                        | FileUtils.IGNORE_ERRORS);
+                                                        }
+                                                } catch (NoSuchFileException ex) {}
+                                        }
+                                } finally {
+                                        pm.endTask();
+                                }
+                        }
+                } catch (NoSuchFileException ex) {}
 	}
 
 	/**
@@ -533,13 +539,15 @@ public class GC {
 
 		// Collect all loose objects which are old enough, not referenced from
 		// the index and not in objectsToKeep
-		Map<ObjectId, File> deletionCandidates = new HashMap<>();
+		Map<ObjectId, Path> deletionCandidates = new HashMap<>();
 		Set<ObjectId> indexObjects = null;
-		File objects = repo.getObjectsDirectory();
-		String[] fanout = objects.list();
-		if (fanout == null || fanout.length == 0) {
-			return;
-		}
+		Path objects = repo.getObjectsDirectoryPath();
+		String[] fanout;
+                try (Stream<Path> stream = Files.list(objects)) {
+                    fanout = stream.map(x -> x.getFileName().toString()).toArray(String[]::new);
+                } catch(IOException ex) {
+                    return;
+                }
 		pm.beginTask(JGitText.get().pruneLooseUnreferencedObjects,
 				fanout.length);
 		try {
@@ -548,12 +556,16 @@ public class GC {
 				pm.update(1);
 				if (d.length() != 2)
 					continue;
-				File[] entries = new File(objects, d).listFiles();
-				if (entries == null)
-					continue;
-				for (File f : entries) {
+                                
+                                Path[] entries;
+                                try (Stream<Path> stream = Files.list(objects.resolve(d))) {
+                                        entries = stream.toArray(Path[]::new);
+                                } catch (IOException ex) {
+                                    continue;
+                                }
+				for (Path f : entries) {
 					checkCancelled();
-					String fName = f.getName();
+					String fName = f.getFileName().toString();
 					if (fName.length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
 						continue;
 					if (repo.getFS().lastModified(f) >= expireDate)
@@ -660,15 +672,15 @@ public class GC {
 		// loose objects. Make a last check, though, to avoid deleting objects
 		// that could have been referenced while the candidates list was being
 		// built (by an incoming push, for example).
-		Set<File> touchedFanout = new HashSet<>();
-		for (File f : deletionCandidates.values()) {
-			if (f.lastModified() < expireDate) {
-				f.delete();
-				touchedFanout.add(f.getParentFile());
+		Set<Path> touchedFanout = new HashSet<>();
+		for (Path f : deletionCandidates.values()) {
+			if (FileUtils.lastModified(f) < expireDate) {
+                                FileUtils.delete(f);
+				touchedFanout.add(f.getParent());
 			}
 		}
 
-		for (File f : touchedFanout) {
+		for (Path f : touchedFanout) {
 			FileUtils.delete(f,
 					FileUtils.EMPTY_DIRECTORIES_ONLY | FileUtils.IGNORE_ERRORS);
 		}
@@ -730,7 +742,7 @@ public class GC {
 	 * @throws IncorrectObjectTypeException
 	 * @throws IOException
 	 */
-	private void removeReferenced(Map<ObjectId, File> id2File,
+	private void removeReferenced(Map<ObjectId, Path> id2File,
 			ObjectWalk w) throws MissingObjectException,
 			IncorrectObjectTypeException, IOException {
 		RevObject ro = w.next();
@@ -906,7 +918,7 @@ public class GC {
 	}
 
 	private void deleteEmptyRefsFolders() throws IOException {
-		Path refs = repo.getDirectory().toPath().resolve(Constants.R_REFS);
+		final Path refs = repo.getDirectoryPath().resolve(Constants.R_REFS);
 		// Avoid deleting a folder that was created after the threshold so that concurrent
 		// operations trying to create a reference are not impacted
 		Instant threshold = Instant.now().minus(30, ChronoUnit.SECONDS);
@@ -916,9 +928,9 @@ public class GC {
 			while (iterator.hasNext()) {
 				try (Stream<Path> s = Files.list(iterator.next())) {
 					s.filter(path -> canBeSafelyDeleted(path, threshold)).forEach(this::deleteDir);
-				}
+				} catch (NoSuchFileException ex) {}
 			}
-		}
+		} catch (NoSuchFileException ex) {}
 	}
 
 	private boolean canBeSafelyDeleted(Path path, Instant threshold) {
@@ -965,7 +977,7 @@ public class GC {
 	 * </p>
 	 */
 	private void deleteOrphans() {
-		Path packDir = repo.getObjectDatabase().getPackDirectory().toPath();
+		final Path packDir = repo.getObjectDatabase().getPackDirectoryPath();
 		List<String> fileNames = null;
 		try (Stream<Path> files = Files.list(packDir)) {
 			fileNames = files.map(path -> path.getFileName().toString())
@@ -998,7 +1010,7 @@ public class GC {
 	}
 
 	private void deleteTempPacksIdx() {
-		Path packDir = repo.getObjectDatabase().getPackDirectory().toPath();
+		final Path packDir = repo.getObjectDatabase().getPackDirectoryPath();
 		Instant threshold = Instant.now().minus(1, ChronoUnit.DAYS);
 		if (!Files.exists(packDir)) {
 			return;
@@ -1127,7 +1139,7 @@ public class GC {
 									Integer.valueOf(treeWalk.getRawMode(0))),
 							(objectId == null) ? "null" : objectId.name(), //$NON-NLS-1$
 							treeWalk.getPathString(), //
-							repo.getIndexFile()));
+							repo.getIndexFilePath()));
 				}
 			}
 			return ret;
@@ -1139,8 +1151,8 @@ public class GC {
 			Set<ObjectId> tagTargets, List<ObjectIdSet> excludeObjects)
 			throws IOException {
 		checkCancelled();
-		File tmpPack = null;
-		Map<PackExt, File> tmpExts = new TreeMap<>((o1, o2) -> {
+		Path tmpPack = null;
+		Map<PackExt, Path> tmpExts = new TreeMap<>((o1, o2) -> {
 			// INDEX entries must be returned last, so the pack
 			// scanner does pick up the new pack until all the
 			// PackExt entries have been written.
@@ -1174,72 +1186,73 @@ public class GC {
 
 			// create temporary files
 			String id = pw.computeName().getName();
-			File packdir = repo.getObjectDatabase().getPackDirectory();
-			tmpPack = File.createTempFile("gc_", ".pack_tmp", packdir); //$NON-NLS-1$ //$NON-NLS-2$
-			final String tmpBase = tmpPack.getName()
-					.substring(0, tmpPack.getName().lastIndexOf('.'));
-			File tmpIdx = new File(packdir, tmpBase + ".idx_tmp"); //$NON-NLS-1$
+			Path packdir = repo.getObjectDatabase().getPackDirectoryPath();
+			tmpPack = Files.createTempFile(packdir, "gc_", ".pack_tmp"); //$NON-NLS-1$ //$NON-NLS-2$
+			final String tmpBase = tmpPack.getFileName().toString()
+					.substring(0, tmpPack.getFileName().toString().lastIndexOf('.'));
+			Path tmpIdx = packdir.resolve(tmpBase + ".idx_tmp"); //$NON-NLS-1$
 			tmpExts.put(INDEX, tmpIdx);
 
-			if (!tmpIdx.createNewFile())
+                        try {
+                            Files.createFile(tmpIdx);
+                        } catch(IOException ex) {
 				throw new IOException(MessageFormat.format(
-						JGitText.get().cannotCreateIndexfile, tmpIdx.getPath()));
+						JGitText.get().cannotCreateIndexfile, tmpIdx));                            
+                        }
 
 			// write the packfile
-			try (FileOutputStream fos = new FileOutputStream(tmpPack);
-					FileChannel channel = fos.getChannel();
-					OutputStream channelStream = Channels
-							.newOutputStream(channel)) {
-				pw.writePack(pm, pm, channelStream);
-				channel.force(true);
+			try (OutputStream out = new BufferedOutputStream(
+                                Files.newOutputStream(tmpPack, 
+                                        StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC))) {
+				pw.writePack(pm, pm, out);
 			}
 
 			// write the packindex
-			try (FileOutputStream fos = new FileOutputStream(tmpIdx);
-					FileChannel idxChannel = fos.getChannel();
-					OutputStream idxStream = Channels
-							.newOutputStream(idxChannel)) {
-				pw.writeIndex(idxStream);
-				idxChannel.force(true);
+			try (OutputStream out = new BufferedOutputStream(
+                                Files.newOutputStream(tmpIdx, 
+                                        StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC))) {
+				pw.writeIndex(out);
 			}
 
 			if (pw.prepareBitmapIndex(pm)) {
-				File tmpBitmapIdx = new File(packdir, tmpBase + ".bitmap_tmp"); //$NON-NLS-1$
+				Path tmpBitmapIdx = packdir.resolve(tmpBase + ".bitmap_tmp"); //$NON-NLS-1$
 				tmpExts.put(BITMAP_INDEX, tmpBitmapIdx);
 
-				if (!tmpBitmapIdx.createNewFile())
+                                try {
+                                    Files.createFile(tmpBitmapIdx);
+                                } catch (IOException ex) {
 					throw new IOException(MessageFormat.format(
 							JGitText.get().cannotCreateIndexfile,
-							tmpBitmapIdx.getPath()));
-
-				try (FileOutputStream fos = new FileOutputStream(tmpBitmapIdx);
-						FileChannel idxChannel = fos.getChannel();
-						OutputStream idxStream = Channels
-								.newOutputStream(idxChannel)) {
-					pw.writeBitmapIndex(idxStream);
-					idxChannel.force(true);
+							tmpBitmapIdx));
+                                }
+                                try (OutputStream out = new BufferedOutputStream(
+                                        Files.newOutputStream(tmpBitmapIdx, 
+                                                StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC))) {
+					pw.writeBitmapIndex(out);
 				}
 			}
 
 			// rename the temporary files to real files
-			File realPack = nameFor(id, ".pack"); //$NON-NLS-1$
+			Path realPack = nameFor(id, ".pack"); //$NON-NLS-1$
 
 			repo.getObjectDatabase().closeAllPackHandles(realPack);
-			tmpPack.setReadOnly();
+                        FileUtils.setReadOnly(tmpPack, true);
 
 			FileUtils.rename(tmpPack, realPack, StandardCopyOption.ATOMIC_MOVE);
-			for (Map.Entry<PackExt, File> tmpEntry : tmpExts.entrySet()) {
-				File tmpExt = tmpEntry.getValue();
-				tmpExt.setReadOnly();
+			for (Map.Entry<PackExt, Path> tmpEntry : tmpExts.entrySet()) {
+				Path tmpExt = tmpEntry.getValue();
+                                FileUtils.setReadOnly(tmpExt, true);
 
-				File realExt = nameFor(id,
+				Path realExt = nameFor(id,
 						"." + tmpEntry.getKey().getExtension()); //$NON-NLS-1$
 				try {
 					FileUtils.rename(tmpExt, realExt,
 							StandardCopyOption.ATOMIC_MOVE);
 				} catch (IOException e) {
-					File newExt = new File(realExt.getParentFile(),
-							realExt.getName() + ".new"); //$NON-NLS-1$
+					Path newExt = realExt.resolveSibling(realExt.getFileName() + ".new"); //$NON-NLS-1$
 					try {
 						FileUtils.rename(tmpExt, newExt,
 								StandardCopyOption.ATOMIC_MOVE);
@@ -1255,18 +1268,19 @@ public class GC {
 
 			return repo.getObjectDatabase().openPack(realPack);
 		} finally {
-			if (tmpPack != null && tmpPack.exists())
-				tmpPack.delete();
-			for (File tmpExt : tmpExts.values()) {
-				if (tmpExt.exists())
-					tmpExt.delete();
+			if (tmpPack != null) {
+                                Files.deleteIfExists(tmpPack);
+                        }
+			for (Path tmpExt : tmpExts.values()) {
+                                Files.deleteIfExists(tmpExt);
 			}
 		}
 	}
 
-	private File nameFor(String name, String ext) {
-		File packdir = repo.getObjectDatabase().getPackDirectory();
-		return new File(packdir, "pack-" + name + ext); //$NON-NLS-1$
+	private Path nameFor(String name, String ext) {
+		final Path packdir = repo.getObjectDatabase().getPackDirectoryPath();
+                return packdir != null ? packdir.resolve("pack-" + name + ext) 
+                                       : Paths.get("pack-" + name + ext); //$NON-NLS-1$
 	}
 
 	private void checkCancelled() throws CancelledException {
@@ -1349,27 +1363,33 @@ public class GC {
 		for (PackFile f : packs) {
 			ret.numberOfPackedObjects += f.getIndex().getObjectCount();
 			ret.numberOfPackFiles++;
-			ret.sizeOfPackedObjects += f.getPackFile().length();
+			ret.sizeOfPackedObjects += Files.size(f.getPackFilePath());
 			if (f.getBitmapIndex() != null)
 				ret.numberOfBitmaps += f.getBitmapIndex().getBitmapCount();
 		}
-		File objDir = repo.getObjectsDirectory();
-		String[] fanout = objDir.list();
-		if (fanout != null && fanout.length > 0) {
-			for (String d : fanout) {
-				if (d.length() != 2)
-					continue;
-				File[] entries = new File(objDir, d).listFiles();
-				if (entries == null)
-					continue;
-				for (File f : entries) {
-					if (f.getName().length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
-						continue;
-					ret.numberOfLooseObjects++;
-					ret.sizeOfLooseObjects += f.length();
-				}
-			}
-		}
+		Path objDir = repo.getObjectsDirectoryPath();
+                try (Stream<Path> stream = Files.list(objDir)) {
+                        String[] fanout = stream .map(x -> x.getFileName().toString()).toArray(String[]::new);
+                        if (fanout != null && fanout.length > 0) {
+                                for (String d : fanout) {
+                                        if (d.length() != 2) {
+                                                continue;
+                                        }
+                                        Path[] entries;
+                                        try (Stream<Path> s = Files.list(objDir.resolve(d))) {
+                                                entries = s.toArray(Path[]::new);
+                                        } catch(IOException ex) {
+                                                continue;
+                                        }
+                                        for (Path f : entries) {
+                                                if (f.getFileName().toString().length() != Constants.OBJECT_ID_STRING_LENGTH - 2)
+                                                        continue;
+                                                ret.numberOfLooseObjects++;
+                                                ret.sizeOfLooseObjects += Files.size(f);
+                                        }
+                                }
+                        }
+                }
 
 		RefDatabase refDb = repo.getRefDatabase();
 		for (Ref r : refDb.getRefs()) {
@@ -1557,13 +1577,13 @@ public class GC {
 		}
 		int n = 0;
 		int threshold = (auto + 255) / 256;
-		Path dir = repo.getObjectsDirectory().toPath().resolve("17"); //$NON-NLS-1$
-		if (!dir.toFile().exists()) {
+		Path dir = repo.getObjectsDirectoryPath().resolve("17"); //$NON-NLS-1$
+		if (!Files.exists(dir)) {
 			return false;
 		}
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, file -> {
 					Path fileName = file.getFileName();
-					return file.toFile().isFile() && fileName != null
+					return Files.isRegularFile(file) && fileName != null
 							&& PATTERN_LOOSE_OBJECT.matcher(fileName.toString())
 									.matches();
 				})) {

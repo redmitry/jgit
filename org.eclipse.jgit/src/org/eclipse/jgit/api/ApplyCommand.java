@@ -42,14 +42,15 @@
  */
 package org.eclipse.jgit.api;
 
+import java.io.BufferedOutputStream;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -127,7 +128,7 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 				throw new PatchFormatException(p.getErrors());
 			for (FileHeader fh : p.getFiles()) {
 				ChangeType type = fh.getChangeType();
-				File f = null;
+				Path f = null;
 				switch (type) {
 				case ADD:
 					f = getFile(fh.getNewPath(), true);
@@ -139,13 +140,16 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 					break;
 				case DELETE:
 					f = getFile(fh.getOldPath(), false);
-					if (!f.delete())
+                                        try {
+                                            Files.delete(f);
+                                        } catch(IOException | SecurityException ex) {
 						throw new PatchApplyException(MessageFormat.format(
-								JGitText.get().cannotDeleteFile, f));
+								JGitText.get().cannotDeleteFile, f));                                            
+                                        }
 					break;
 				case RENAME:
 					f = getFile(fh.getOldPath(), false);
-					File dest = getFile(fh.getNewPath(), false);
+					final Path dest = getFile(fh.getNewPath(), false);
 					try {
 						FileUtils.rename(f, dest,
 								StandardCopyOption.ATOMIC_MOVE);
@@ -157,13 +161,9 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 				case COPY:
 					f = getFile(fh.getOldPath(), false);
 					byte[] bs = IO.readFully(f);
-					FileOutputStream fos = new FileOutputStream(getFile(
-							fh.getNewPath(),
-							true));
-					try {
+					try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(
+                                                                getFile(fh.getNewPath(), true)))) {
 						fos.write(bs);
-					} finally {
-						fos.close();
 					}
 				}
 				r.addUpdatedFile(f);
@@ -176,12 +176,12 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 		return r;
 	}
 
-	private File getFile(String path, boolean create)
+	private Path getFile(String path, boolean create)
 			throws PatchApplyException {
-		File f = new File(getRepository().getWorkTree(), path);
+		Path f = getRepository().getWorkTreePath().resolve(path);
 		if (create)
 			try {
-				File parent = f.getParentFile();
+				final Path parent = f.getParent();
 				FileUtils.mkdirs(parent, true);
 				FileUtils.createNewFile(f);
 			} catch (IOException e) {
@@ -197,7 +197,7 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 	 * @throws IOException
 	 * @throws PatchApplyException
 	 */
-	private void apply(File f, FileHeader fh)
+	private void apply(Path f, FileHeader fh)
 			throws IOException, PatchApplyException {
 		RawText rt = new RawText(f);
 		List<String> oldLines = new ArrayList<>(rt.size());
@@ -261,8 +261,7 @@ public class ApplyCommand extends GitCommand<ApplyResult> {
 		if (sb.length() > 0) {
 			sb.deleteCharAt(sb.length() - 1);
 		}
-		try (Writer fw = new OutputStreamWriter(new FileOutputStream(f),
-				UTF_8)) {
+		try (Writer fw = Files.newBufferedWriter(f, UTF_8)) {
 			fw.write(sb.toString());
 		}
 

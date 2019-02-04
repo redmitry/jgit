@@ -50,6 +50,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -65,6 +67,7 @@ import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.errors.InvalidPatternException;
 import org.eclipse.jgit.fnmatch.FileNameMatcher;
 import org.eclipse.jgit.transport.SshConstants;
+import org.eclipse.jgit.util.FileUtils;
 import org.eclipse.jgit.util.StringUtils;
 import org.eclipse.jgit.util.SystemReader;
 
@@ -120,10 +123,10 @@ public class OpenSshConfigFile {
 	private static final String DEFAULT_NAME = ""; //$NON-NLS-1$
 
 	/** The user's home directory, as key files may be relative to here. */
-	private final File home;
+	private final Path home;
 
 	/** The .ssh/config file we read and monitor for updates. */
-	private final File configFile;
+	private final Path configFile;
 
 	/** User name of the user on the host OS. */
 	private final String localUserName;
@@ -154,6 +157,21 @@ public class OpenSshConfigFile {
 	private State state;
 
 	/**
+	 * @deprecated use {@link #OpenSshConfigFile(Path, Path, String)}
+	 *
+	 * @param home
+	 *            user's home directory for the purpose of ~ replacement
+	 * @param config
+	 *            file to load.
+	 * @param localUserName
+	 *            user name of the current user on the local host OS
+	 */
+	public OpenSshConfigFile(@NonNull File home, @NonNull File config,
+			@NonNull String localUserName) {
+                this(home.toPath(), config.toPath(), localUserName);
+	}
+        
+	/**
 	 * Creates a new {@link OpenSshConfigFile} that will read the config from
 	 * file {@code config} use the given file {@code home} as "home" directory.
 	 *
@@ -164,7 +182,7 @@ public class OpenSshConfigFile {
 	 * @param localUserName
 	 *            user name of the current user on the local host OS
 	 */
-	public OpenSshConfigFile(@NonNull File home, @NonNull File config,
+	public OpenSshConfigFile(@NonNull Path home, @NonNull Path config,
 			@NonNull String localUserName) {
 		this.home = home;
 		this.configFile = config;
@@ -223,18 +241,22 @@ public class OpenSshConfigFile {
 	}
 
 	private synchronized State refresh() {
-		final long mtime = configFile.lastModified();
-		if (mtime != lastModified) {
-			State newState = new State();
-			try (BufferedReader br = Files
-					.newBufferedReader(configFile.toPath(), UTF_8)) {
-				newState.entries = parse(br);
-			} catch (IOException | RuntimeException none) {
-				// Ignore -- we'll set and return an empty state
-			}
-			lastModified = mtime;
-			state = newState;
-		}
+                try {
+                    final long mtime = FileUtils.lastModified(configFile);
+                    if (mtime != lastModified) {
+                            State newState = new State();
+                            try (BufferedReader br = Files
+                                            .newBufferedReader(configFile, UTF_8)) {
+                                    newState.entries = parse(br);
+                            } catch (IOException | RuntimeException none) {
+                                    // Ignore -- we'll set and return an empty state
+                            }
+                            lastModified = mtime;
+                            state = newState;
+                    }
+                } catch(IOException ex) {
+                    // ???
+                }
 		return state;
 	}
 
@@ -419,15 +441,16 @@ public class OpenSshConfigFile {
 		return b.toString();
 	}
 
-	private static File toFile(String path, File home) {
-		if (path.startsWith("~/") || path.startsWith("~" + File.separator)) { //$NON-NLS-1$ //$NON-NLS-2$
-			return new File(home, path.substring(2));
+	private static Path toFile(Path home, String file) {
+                final Path path = Paths.get(file);
+                if (path.isAbsolute()) {
+                    return path;
+                }
+
+		if (file.startsWith("~/") || file.startsWith("~" + home.getFileSystem().getSeparator())) { //$NON-NLS-1$ //$NON-NLS-2$
+			return home.resolve(file.substring(2));
 		}
-		File ret = new File(path);
-		if (ret.isAbsolute()) {
-			return ret;
-		}
-		return new File(home, path);
+		return home.resolve(file);
 	}
 
 	/**
@@ -716,16 +739,16 @@ public class OpenSshConfigFile {
 			return result;
 		}
 
-		private List<String> replaceTilde(List<String> values, File home) {
+		private List<String> replaceTilde(List<String> values, Path home) {
 			List<String> result = new ArrayList<>(values.size());
 			for (String value : values) {
-				result.add(toFile(value, home).getPath());
+				result.add(toFile(home, value).toString());
 			}
 			return result;
 		}
 
 		void substitute(String originalHostName, int port, String userName,
-				String localUserName, File home) {
+				String localUserName, Path home) {
 			int p = port >= 0 ? port : positive(getValue(SshConstants.PORT));
 			if (p < 0) {
 				p = SshConstants.SSH_DEFAULT_PORT;
@@ -776,13 +799,13 @@ public class OpenSshConfigFile {
 				String value = options.get(SshConstants.IDENTITY_AGENT);
 				if (value != null) {
 					value = r.substitute(value, "dhlru"); //$NON-NLS-1$
-					value = toFile(value, home).getPath();
+					value = toFile(home, value).toString();
 					options.put(SshConstants.IDENTITY_AGENT, value);
 				}
 				value = options.get(SshConstants.CONTROL_PATH);
 				if (value != null) {
 					value = r.substitute(value, "ChLlnpru"); //$NON-NLS-1$
-					value = toFile(value, home).getPath();
+					value = toFile(home, value).toString();
 					options.put(SshConstants.CONTROL_PATH, value);
 				}
 				value = options.get(SshConstants.LOCAL_COMMAND);
@@ -853,9 +876,9 @@ public class OpenSshConfigFile {
 		private final Map<Character, String> replacements = new HashMap<>();
 
 		public Replacer(String host, int port, String user,
-				String localUserName, File home) {
+				String localUserName, Path home) {
 			replacements.put(Character.valueOf('%'), "%"); //$NON-NLS-1$
-			replacements.put(Character.valueOf('d'), home.getPath());
+			replacements.put(Character.valueOf('d'), home.toString());
 			replacements.put(Character.valueOf('h'), host);
 			String localhost = SystemReader.getInstance().getHostname();
 			replacements.put(Character.valueOf('l'), localhost);

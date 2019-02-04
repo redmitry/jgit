@@ -52,12 +52,11 @@ import static org.eclipse.jgit.lib.Constants.R_NOTES;
 import static org.eclipse.jgit.lib.Constants.R_REFS;
 import static org.eclipse.jgit.lib.Constants.R_REMOTES;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.internal.JGitText;
@@ -125,10 +124,11 @@ public class ReflogWriter {
 	 * @return this writer.
 	 */
 	public ReflogWriter create() throws IOException {
-		FileUtils.mkdir(refdb.logsDir);
-		FileUtils.mkdir(refdb.logsRefsDir);
-		FileUtils.mkdir(
-				new File(refdb.logsRefsDir, R_HEADS.substring(R_REFS.length())));
+                Files.createDirectory(refdb.logsDir);
+                Files.createDirectory(refdb.logsRefsDir);
+
+                Files.createDirectory(refdb.logsRefsDir.resolve(R_HEADS.substring(R_REFS.length())));
+
 		return this;
 	}
 
@@ -220,44 +220,45 @@ public class ReflogWriter {
 		return Constants.encode(r.toString());
 	}
 
-	private FileOutputStream getFileOutputStream(File log) throws IOException {
-		try {
-			return new FileOutputStream(log, true);
-		} catch (FileNotFoundException err) {
-			File dir = log.getParentFile();
-			if (dir.exists()) {
-				throw err;
-			}
-			if (!dir.mkdirs() && !dir.isDirectory()) {
-				throw new IOException(MessageFormat
-						.format(JGitText.get().cannotCreateDirectory, dir));
-			}
-			return new FileOutputStream(log, true);
-		}
-	}
-
 	private ReflogWriter log(String refName, byte[] rec) throws IOException {
-		File log = refdb.logFor(refName);
+		final Path log = refdb.logForPath(refName);
 		boolean write = forceWrite
 				|| (isLogAllRefUpdates() && shouldAutoCreateLog(refName))
-				|| log.isFile();
+				|| Files.isRegularFile(log);
 		if (!write)
 			return this;
 
 		WriteConfig wc = refdb.getRepository().getConfig().get(WriteConfig.KEY);
-		try (FileOutputStream out = getFileOutputStream(log)) {
-			if (wc.getFSyncRefFiles()) {
-				FileChannel fc = out.getChannel();
-				ByteBuffer buf = ByteBuffer.wrap(rec);
-				while (0 < buf.remaining()) {
-					fc.write(buf);
-				}
-				fc.force(true);
-			} else {
-				out.write(rec);
-			}
+		try (OutputStream out = getOutputStream(log, wc.getFSyncRefFiles())) {
+                        out.write(rec);
 		}
 		return this;
+	}
+
+	private OutputStream getOutputStream(Path log, boolean fsync) throws IOException {
+            
+                StandardOpenOption[] options = fsync ? new StandardOpenOption[] {
+                                StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                StandardOpenOption.APPEND, StandardOpenOption.SYNC}
+                                                     : new StandardOpenOption[] {
+                                StandardOpenOption.CREATE, StandardOpenOption.WRITE, 
+                                StandardOpenOption.APPEND};
+		try {
+			return Files.newOutputStream(log, options);
+		} catch (IOException err) {
+			final Path dir = log.getParent();
+			if (Files.exists(dir)) {
+				throw err;
+			}
+                        
+                        try {
+                                FileUtils.mkdirs(dir);
+                                return Files.newOutputStream(log, options);
+                        } catch(IOException ex) {
+				throw new IOException(MessageFormat
+						.format(JGitText.get().cannotCreateDirectory, dir));                            
+                        }
+		}
 	}
 
 	private boolean isLogAllRefUpdates() {

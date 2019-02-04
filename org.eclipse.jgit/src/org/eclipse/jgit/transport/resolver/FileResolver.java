@@ -45,6 +45,9 @@ package org.eclipse.jgit.transport.resolver;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,7 +71,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 
 	private final Map<String, Repository> exports;
 
-	private final Collection<File> exportBase;
+	private final Collection<Path> exportBase;
 
 	/**
 	 * Initialize an empty file based resolver.
@@ -76,6 +79,19 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	public FileResolver() {
 		exports = new ConcurrentHashMap<>();
 		exportBase = new CopyOnWriteArrayList<>();
+	}
+
+	/**
+	 * @deprecated use {@link #FileResolver(Path, boolean)}
+	 *
+	 * @param basePath
+	 *            the base path all repositories are rooted under.
+	 * @param exportAll
+	 *            if true, exports all repositories, ignoring the check for the
+	 *            {@code git-daemon-export-ok} files.
+	 */
+	public FileResolver(File basePath, boolean exportAll) {
+		this(basePath != null ? basePath.toPath() : null, exportAll);
 	}
 
 	/**
@@ -87,7 +103,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	 *            if true, exports all repositories, ignoring the check for the
 	 *            {@code git-daemon-export-ok} files.
 	 */
-	public FileResolver(File basePath, boolean exportAll) {
+	public FileResolver(Path basePath, boolean exportAll) {
 		this();
 		exportDirectory(basePath);
 		setExportAll(exportAll);
@@ -106,8 +122,8 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 			return db;
 		}
 
-		for (File base : exportBase) {
-			File dir = FileKey.resolve(new File(base, name), FS.DETECTED);
+		for (Path base : exportBase) {
+                        Path dir = FileKey.resolve(base.resolve(name), FS.DETECTED);
 			if (dir == null)
 				continue;
 
@@ -142,7 +158,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 		}
 
 		if (exportBase.size() == 1) {
-			File dir = new File(exportBase.iterator().next(), name);
+                        final Path dir = exportBase.iterator().next().resolve(name);
 			throw new RepositoryNotFoundException(name,
 					new RepositoryNotFoundException(dir));
 		}
@@ -195,7 +211,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	}
 
 	/**
-	 * Recursively export all Git repositories within a directory.
+	 * @deprecated use {@link #exportDirectory(Path)}
 	 *
 	 * @param dir
 	 *            the directory to export. This directory must not itself be a
@@ -203,6 +219,18 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	 *            named <code>git-daemon-export-ok</code> will be published.
 	 */
 	public void exportDirectory(File dir) {
+		exportDirectory(dir != null ? dir.toPath() : null);
+	}
+
+	/**
+	 * Recursively export all Git repositories within a directory.
+	 *
+	 * @param dir
+	 *            the directory to export. This directory must not itself be a
+	 *            git repository, but any directory below it which has a file
+	 *            named <code>git-daemon-export-ok</code> will be published.
+	 */
+	public void exportDirectory(Path dir) {
 		exportBase.add(dir);
 	}
 
@@ -226,12 +254,13 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 	 */
 	protected boolean isExportOk(C req, String repositoryName, Repository db)
 			throws IOException {
-		if (isExportAll())
+		if (isExportAll()) {
 			return true;
-		else if (db.getDirectory() != null)
-			return new File(db.getDirectory(), "git-daemon-export-ok").exists(); //$NON-NLS-1$
-		else
-			return false;
+                } else if (db.getDirectoryPath() != null) {
+                        return Files.exists(db.getDirectoryPath().resolve("git-daemon-export-ok"));
+                }
+                
+                return false;
 	}
 
 	private static String nameWithDotGit(String name) {
@@ -246,7 +275,7 @@ public class FileResolver<C> implements RepositoryResolver<C> {
 
 		if (name.indexOf('\\') >= 0)
 			return true; // no windows/dos style paths
-		if (new File(name).isAbsolute())
+		if (Paths.get(name).isAbsolute())
 			return true; // no absolute paths
 
 		if (name.startsWith("../")) //$NON-NLS-1$

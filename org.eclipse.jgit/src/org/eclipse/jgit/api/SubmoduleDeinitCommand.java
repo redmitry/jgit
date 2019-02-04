@@ -44,13 +44,17 @@ package org.eclipse.jgit.api;
 
 import static org.eclipse.jgit.util.FileUtils.RECURSIVE;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.JGitInternalException;
@@ -166,17 +170,16 @@ public class SubmoduleDeinitCommand
 	 * @throws IOException
 	 */
 	private void deinit(String path) throws IOException {
-		File dir = new File(repo.getWorkTree(), path);
-		if (!dir.isDirectory()) {
+                final Path dir = repo.getWorkTreePath().resolve(path);
+		if (!Files.isDirectory(dir)) {
 			throw new JGitInternalException(MessageFormat.format(
 					JGitText.get().expectedDirectoryNotSubmodule, path));
 		}
-		final File[] ls = dir.listFiles();
-		if (ls != null) {
-			for (int i = 0; i < ls.length; i++) {
-				FileUtils.delete(ls[i], RECURSIVE);
-			}
-		}
+                try (Stream<Path> stream = Files.list(dir)) {
+                    for (Iterator<Path> iter = stream.iterator(); iter.hasNext();) {
+                        FileUtils.delete(iter.next(), RECURSIVE);
+                    }
+                } catch (NoSuchFileException ex) {}
 	}
 
 	/**

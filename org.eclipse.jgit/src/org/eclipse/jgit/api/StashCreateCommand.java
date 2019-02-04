@@ -42,9 +42,9 @@
  */
 package org.eclipse.jgit.api;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -384,8 +384,7 @@ public class StashCreateCommand extends GitCommand<RevCommit> {
 				if (includeUntracked) {
 					for (DirCacheEntry entry : untracked) {
 						String repoRelativePath = entry.getPathString();
-						File file = new File(repo.getWorkTree(),
-								repoRelativePath);
+						Path file = repo.getWorkTreePath().resolve(repoRelativePath);
 						FileUtils.delete(file);
 						deletedFiles.add(repoRelativePath);
 					}

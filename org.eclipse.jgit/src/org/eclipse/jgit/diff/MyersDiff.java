@@ -44,6 +44,7 @@
 
 package org.eclipse.jgit.diff;
 
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.errors.DiffInterruptedException;
@@ -568,8 +569,8 @@ if (k < beginK || k > endK)
 			System.exit(1);
 		}
 		try {
-			RawText a = new RawText(new java.io.File(args[0]));
-			RawText b = new RawText(new java.io.File(args[1]));
+			RawText a = new RawText(Paths.get(args[0]));
+			RawText b = new RawText(Paths.get(args[1]));
 			EditList r = INSTANCE.diff(RawTextComparator.DEFAULT, a, b);
 			System.out.println(r.toString());
 		} catch (Exception e) {

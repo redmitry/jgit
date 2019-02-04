@@ -45,6 +45,7 @@ package org.eclipse.jgit.api;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.RepositoryBuilder;
@@ -89,7 +90,7 @@ public class Git implements AutoCloseable {
 	private final boolean closeRepo;
 
 	/**
-	 * Open repository
+	 * @deprecated use {@link #open(Path)}
 	 *
 	 * @param dir
 	 *            the repository to open. May be either the GIT_DIR, or the
@@ -108,6 +109,20 @@ public class Git implements AutoCloseable {
 	 * @param dir
 	 *            the repository to open. May be either the GIT_DIR, or the
 	 *            working tree directory that contains {@code .git}.
+	 * @return a {@link org.eclipse.jgit.api.Git} object for the existing git
+	 *         repository
+	 * @throws java.io.IOException
+	 */
+	public static Git open(Path dir) throws IOException {
+		return open(dir, FS.DETECTED);
+	}
+
+	/**
+	 * @deprecated use {@link #open(Path, FS)}
+	 *
+	 * @param dir
+	 *            the repository to open. May be either the GIT_DIR, or the
+	 *            working tree directory that contains {@code .git}.
 	 * @param fs
 	 *            filesystem abstraction to use when accessing the repository.
 	 * @return a {@link org.eclipse.jgit.api.Git} object for the existing git
@@ -115,10 +130,26 @@ public class Git implements AutoCloseable {
 	 * @throws java.io.IOException
 	 */
 	public static Git open(File dir, FS fs) throws IOException {
+		return open(dir != null ? dir.toPath() : null, fs);
+	}
+
+	/**
+	 * Open repository
+	 *
+	 * @param dir
+	 *            the repository to open. May be either the GIT_DIR, or the
+	 *            working tree directory that contains {@code .git}.
+	 * @param fs
+	 *            filesystem abstraction to use when accessing the repository.
+	 * @return a {@link org.eclipse.jgit.api.Git} object for the existing git
+	 *         repository. Closing this instance will close the repo.
+	 * @throws java.io.IOException
+	 */
+	public static Git open(Path dir, FS fs) throws IOException {
 		RepositoryCache.FileKey key;
 
 		key = RepositoryCache.FileKey.lenient(dir, fs);
-		Repository db = new RepositoryBuilder().setFS(fs).setGitDir(key.getFile())
+		Repository db = new RepositoryBuilder().setFS(fs).setGitDir(key.getFilePath())
 				.setMustExist(true).build();
 		return new Git(db, true);
 	}

@@ -44,10 +44,12 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
+import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.Iterator;
 import java.util.Set;
@@ -78,17 +80,12 @@ import org.eclipse.jgit.util.io.SilentFileInputStream;
 public abstract class PackIndex
 		implements Iterable<PackIndex.MutableEntry>, ObjectIdSet {
 	/**
-	 * Open an existing pack <code>.idx</code> file for reading.
-	 * <p>
-	 * The format of the file will be automatically detected and a proper access
-	 * implementation for that format will be constructed and returned to the
-	 * caller. The file may or may not be held open by the returned instance.
-	 * </p>
+	 * @deprecated use {@link #open(Path)}
 	 *
 	 * @param idxFile
 	 *            existing pack .idx to read.
 	 * @return access implementation for the requested file.
-	 * @throws FileNotFoundException
+	 * @throws java.io.FileNotFoundException
 	 *             the file does not exist.
 	 * @throws java.io.IOException
 	 *             the file exists but could not be read due to security errors,
@@ -102,6 +99,34 @@ public abstract class PackIndex
 			throw new IOException(
 					MessageFormat.format(JGitText.get().unreadablePackIndex,
 							idxFile.getAbsolutePath()),
+					ioe);
+		}
+	}
+
+	/**
+	 * Open an existing pack <code>.idx</code> file for reading.
+	 * <p>
+	 * The format of the file will be automatically detected and a proper access
+	 * implementation for that format will be constructed and returned to the
+	 * caller. The file may or may not be held open by the returned instance.
+	 * </p>
+	 *
+	 * @param idxFile
+	 *            existing pack .idx to read.
+	 * @return access implementation for the requested file.
+	 * @throws java.nio.file.NoSuchFileException
+	 *             the file does not exist.
+	 * @throws java.io.IOException
+	 *             the file exists but could not be read due to security errors,
+	 *             unrecognized data version, or unexpected data corruption.
+	 */
+	public static PackIndex open(Path idxFile) throws IOException {
+		try (InputStream fd = new BufferedInputStream(Files.newInputStream(idxFile))) {
+			return read(fd);
+		} catch (IOException ioe) {
+			throw new IOException(
+					MessageFormat.format(JGitText.get().unreadablePackIndex,
+							idxFile.toAbsolutePath()),
 					ioe);
 		}
 	}

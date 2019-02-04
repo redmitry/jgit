@@ -42,9 +42,6 @@
  */
 package org.eclipse.jgit.lib.internal;
 
-import static java.nio.file.Files.exists;
-import static java.nio.file.Files.newInputStream;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -125,7 +122,7 @@ class BouncyCastleGpgKeyLocator {
 			PGPDigestCalculatorProvider calculatorProvider,
 			PBEProtectionRemoverFactory passphraseProvider,
 			PGPPublicKey publicKey) throws IOException {
-		try (InputStream in = newInputStream(keyFile)) {
+		try (InputStream in = Files.newInputStream(keyFile)) {
 			return new SExprParser(calculatorProvider).parseSecretKey(
 					new BufferedInputStream(in), passphraseProvider, publicKey);
 		} catch (PGPException | ClassCastException e) {
@@ -203,7 +200,7 @@ class BouncyCastleGpgKeyLocator {
 	public BouncyCastleGpgKey findSecretKey()
 			throws IOException, PGPException, CanceledException,
 			UnsupportedCredentialItem, URISyntaxException {
-		if (exists(USER_KEYBOX_PATH)) {
+		if (Files.exists(USER_KEYBOX_PATH)) {
 			PGPPublicKey publicKey = //
 					findPublicKeyInKeyBox(USER_KEYBOX_PATH);
 
@@ -214,7 +211,7 @@ class BouncyCastleGpgKeyLocator {
 
 			throw new PGPException(MessageFormat
 					.format(JGitText.get().gpgNoPublicKeyFound, signingKey));
-		} else if (exists(USER_PGP_LEGACY_SECRING_FILE)) {
+		} else if (Files.exists(USER_PGP_LEGACY_SECRING_FILE)) {
 			PGPSecretKey secretKey = findSecretKeyInLegacySecring(signingKey,
 					USER_PGP_LEGACY_SECRING_FILE);
 
@@ -288,7 +285,7 @@ class BouncyCastleGpgKeyLocator {
 	private PGPSecretKey findSecretKeyInLegacySecring(String signingkey,
 			Path secringFile) throws IOException, PGPException {
 
-		try (InputStream in = newInputStream(secringFile)) {
+		try (InputStream in = Files.newInputStream(secringFile)) {
 			PGPSecretKeyRingCollection pgpSec = new PGPSecretKeyRingCollection(
 					PGPUtil.getDecoderStream(new BufferedInputStream(in)),
 					new JcaKeyFingerprintCalculator());
@@ -329,7 +326,7 @@ class BouncyCastleGpgKeyLocator {
 	private KeyBox readKeyBoxFile(Path keyboxFile) throws IOException {
 		KeyBox keyBox;
 		try (InputStream in = new BufferedInputStream(
-				newInputStream(keyboxFile))) {
+				Files.newInputStream(keyboxFile))) {
 			// note: KeyBox constructor reads in the whole InputStream at once
 			// this code will change in 1.61 to
 			// either 'new BcKeyBox(in)' or 'new JcaKeyBoxBuilder().build(in)'

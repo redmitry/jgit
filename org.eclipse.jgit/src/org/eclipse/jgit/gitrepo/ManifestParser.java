@@ -42,11 +42,12 @@
  */
 package org.eclipse.jgit.gitrepo;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -245,7 +246,7 @@ public class ManifestParser extends DefaultHandler {
 			} else if (filename != null) {
 				int index = filename.lastIndexOf('/');
 				String path = filename.substring(0, index + 1) + name;
-				try (InputStream is = new FileInputStream(path)) {
+				try (InputStream is = Files.newInputStream(Paths.get(path))) {
 					read(is);
 				} catch (IOException e) {
 					throw new SAXException(MessageFormat.format(

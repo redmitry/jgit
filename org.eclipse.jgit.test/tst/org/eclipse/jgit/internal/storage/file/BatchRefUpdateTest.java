@@ -64,6 +64,7 @@ import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -756,12 +757,12 @@ public class BatchRefUpdateTest extends LocalDiskRepositoryTestCase {
 				new ReceiveCommand(zeroId(), B, "refs/heads/branch", CREATE),
 				new ReceiveCommand(A, B, "refs/heads/master", UPDATE));
 
-		LockFile myLock = new LockFile(refdir.fileFor("refs/heads/master"));
+		LockFile myLock = new LockFile(refdir.filePathFor("refs/heads/master"));
 		assertTrue(myLock.lock());
 		try {
 			execute(newBatchUpdate(cmds).setAllowNonFastForwards(true));
 
-			assertFalse(LockFile.getLockFile(refdir.packedRefsFile).exists());
+			assertFalse(Files.exists(LockFile.getLockFile(refdir.packedRefsFile)));
 			assertFalse(getLockFile("refs/heads/branch").exists());
 
 			if (atomic) {
@@ -989,7 +990,7 @@ public class BatchRefUpdateTest extends LocalDiskRepositoryTestCase {
 	}
 
 	private File getLockFile(String refName) {
-		return LockFile.getLockFile(refdir.fileFor(refName));
+		return LockFile.getLockFile(refdir.filePathFor(refName)).toFile();
 	}
 
 	private void assertReflogUnchanged(

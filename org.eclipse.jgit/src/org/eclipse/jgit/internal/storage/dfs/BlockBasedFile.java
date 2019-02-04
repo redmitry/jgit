@@ -152,16 +152,19 @@ abstract class BlockBasedFile {
 			long len = length;
 			if (len < 0) {
 				len = rc.size();
-				if (0 <= len)
+				if (0 <= len) {
 					length = len;
+                                }
 			}
 
-			if (0 <= len && len < pos + size)
+			if (0 <= len && len < pos + size) {
 				size = (int) (len - pos);
-			if (size <= 0)
+                        }
+			if (size <= 0) {
 				throw new EOFException(MessageFormat.format(
 						DfsText.get().shortReadOfBlock, Long.valueOf(pos),
 						getFileName(), Long.valueOf(0), Long.valueOf(0)));
+                        }
 
 			byte[] buf = new byte[size];
 			rc.position(pos);
@@ -193,10 +196,9 @@ abstract class BlockBasedFile {
 	}
 
 	static int read(ReadableChannel rc, ByteBuffer buf) throws IOException {
-		int n;
-		do {
-			n = rc.read(buf);
-		} while (0 < n && buf.hasRemaining());
+                while(buf.hasRemaining() && rc.read(buf) >= 0) {
+                    // do nothing
+                }
 		return buf.position();
 	}
 

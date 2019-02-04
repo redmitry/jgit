@@ -53,6 +53,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -120,14 +123,14 @@ class TransportLocal extends Transport implements PackTransport {
 		@Override
 		public Transport open(URIish uri, Repository local, String remoteName)
 				throws NoRemoteRepositoryException {
-			File localPath = local.isBare() ? local.getDirectory() : local.getWorkTree();
-			File path = local.getFS().resolve(localPath, uri.getPath());
+			Path localPath = local.isBare() ? local.getDirectoryPath() : local.getWorkTreePath();
+			Path path = local.getFS().resolve(localPath, uri.getPath());
 			// If the reference is to a local file, C Git behavior says
 			// assume this is a bundle, since repositories are directories.
-			if (path.isFile())
+			if (Files.isRegularFile(path))
 				return new TransportBundleFile(local, uri, path);
 
-			File gitDir = RepositoryCache.FileKey.resolve(path, local.getFS());
+			Path gitDir = RepositoryCache.FileKey.resolve(path, local.getFS());
 			if (gitDir == null)
 				throw new NoRemoteRepositoryException(uri, JGitText.get().notFound);
 			return new TransportLocal(local, uri, gitDir);
@@ -136,13 +139,13 @@ class TransportLocal extends Transport implements PackTransport {
 		@Override
 		public Transport open(URIish uri) throws NotSupportedException,
 				TransportException {
-			File path = FS.DETECTED.resolve(new File("."), uri.getPath()); //$NON-NLS-1$
+                        Path path = FS.DETECTED.resolve(Paths.get("."), uri.getPath()); //$NON-NLS-1$
 			// If the reference is to a local file, C Git behavior says
 			// assume this is a bundle, since repositories are directories.
-			if (path.isFile())
+			if (Files.isRegularFile(path))
 				return new TransportBundleFile(uri, path);
 
-			File gitDir = RepositoryCache.FileKey.resolve(path, FS.DETECTED);
+			Path gitDir = RepositoryCache.FileKey.resolve(path, FS.DETECTED);
 			if (gitDir == null)
 				throw new NoRemoteRepositoryException(uri,
 						JGitText.get().notFound);
@@ -150,14 +153,34 @@ class TransportLocal extends Transport implements PackTransport {
 		}
 	};
 
-	private final File remoteGitDir;
+	private final Path remoteGitDir;
 
+        /**
+         * @deprecated use {@link #TransportLocal(Repository, URIish, Path)}
+         * 
+         * @param local
+         * @param uri
+         * @param gitDir 
+         */
 	TransportLocal(Repository local, URIish uri, File gitDir) {
+		this(local, uri, gitDir != null ? gitDir.toPath() : null);
+	}
+
+	TransportLocal(Repository local, URIish uri, Path gitDir) {
 		super(local, uri);
 		remoteGitDir = gitDir;
 	}
 
+        /**
+         * @deprecated use {@link #TransportLocal(URIish, Path)}
+         * @param uri
+         * @param gitDir 
+         */
 	TransportLocal(URIish uri, File gitDir) {
+		this(uri, gitDir != null ? gitDir.toPath() : null);
+	}
+
+	TransportLocal(URIish uri, Path gitDir) {
 		super(uri);
 		remoteGitDir = gitDir;
 	}
@@ -234,7 +257,8 @@ class TransportLocal extends Transport implements PackTransport {
 		try {
 			String[] args = { "." }; //$NON-NLS-1$
 			ProcessBuilder proc = local.getFS().runInShell(cmd, args);
-			proc.directory(remoteGitDir);
+                        
+			proc.directory(remoteGitDir.toFile());
 
 			// Remove the same variables CGit does.
 			Map<String, String> env = proc.environment();

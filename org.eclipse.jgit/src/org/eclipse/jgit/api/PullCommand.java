@@ -472,7 +472,7 @@ public class PullCommand extends TransportCommand<PullCommand, PullResult> {
 	 *            to be used for recursing into submodules
 	 * @return {@code this}
 	 * @since 4.7
-	 * @see FetchCommand#setRecurseSubmodules(FetchRecurseSubmodulesMode)
+	 * @see FetchCommand#setRecurseSubmodules(org.eclipse.jgit.lib.SubmoduleConfig.FetchRecurseSubmodulesMode)
 	 */
 	public PullCommand setRecurseSubmodules(
 			@Nullable FetchRecurseSubmodulesMode recurse) {

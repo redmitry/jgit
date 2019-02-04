@@ -44,9 +44,9 @@
 package org.eclipse.jgit.diff;
 
 import java.io.BufferedInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.NoSuchFileException;
 
 import org.eclipse.jgit.errors.LargeObjectException;
 import org.eclipse.jgit.errors.MissingObjectException;
@@ -211,10 +211,10 @@ public abstract class ContentSource {
 				tw.setFilter(PathFilter.create(path));
 				current = path;
 				if (!tw.next())
-					throw new FileNotFoundException(path);
+					throw new NoSuchFileException(path);
 				ptr = tw.getTree(0, WorkingTreeIterator.class);
 				if (ptr == null)
-					throw new FileNotFoundException(path);
+					throw new NoSuchFileException(path);
 			}
 		}
 	}

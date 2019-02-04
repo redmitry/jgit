@@ -43,13 +43,11 @@
 
 package org.eclipse.jgit.lib;
 
-import java.io.File;
-
 /**
  * Base class to support constructing a {@link org.eclipse.jgit.lib.Repository}.
  * <p>
- * Applications must set one of {@link #setGitDir(File)} or
- * {@link #setWorkTree(File)}, or use {@link #readEnvironment()} or
+ * Applications must set one of {@link #setGitDir(java.nio.file.Path)} or
+ * {@link #setWorkTree(java.nio.file.Path)}, or use {@link #readEnvironment()} or
  * {@link #findGitDir()} in order to configure the minimum property set
  * necessary to open a repository.
  * <p>

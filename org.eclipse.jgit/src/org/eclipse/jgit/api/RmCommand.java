@@ -42,8 +42,9 @@
  */
 package org.eclipse.jgit.api;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -167,8 +168,7 @@ public class RmCommand extends GitCommand<DirCache> {
 					final FileMode mode = tw.getFileMode(0);
 					if (mode.getObjectType() == Constants.OBJ_BLOB) {
 						String relativePath = tw.getPathString();
-						final File path = new File(repo.getWorkTree(),
-								relativePath);
+						final Path path = repo.getWorkTreePath().resolve(relativePath);
 						// Deleting a blob is simply a matter of removing
 						// the file or symlink named by the tree entry.
 						if (delete(path)) {
@@ -198,11 +198,16 @@ public class RmCommand extends GitCommand<DirCache> {
 		return dc;
 	}
 
-	private boolean delete(File p) {
+	private boolean delete(Path p) {
 		boolean deleted = false;
-		while (p != null && !p.equals(repo.getWorkTree()) && p.delete()) {
+		while (p != null && !p.equals(repo.getWorkTreePath())) {
+                        try {
+                            Files.delete(p);
+                        } catch(IOException ex) {
+                            break;
+                        }
 			deleted = true;
-			p = p.getParentFile();
+			p = p.getParent();
 		}
 		return deleted;
 	}

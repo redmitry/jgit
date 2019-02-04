@@ -44,9 +44,10 @@
 
 package org.eclipse.jgit.internal.storage.file;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 import org.eclipse.jgit.lib.Constants;
@@ -183,17 +184,18 @@ class RefDirectoryRename extends RefRename {
 			try {
 				refdb.delete(tmp);
 			} catch (IOException err) {
-				FileUtils.delete(refdb.fileFor(tmp.getName()));
+                                Files.deleteIfExists(refdb.filePathFor(tmp.getName()));
 			}
 		}
 	}
 
 	private boolean renameLog(RefUpdate src, RefUpdate dst) {
-		File srcLog = refdb.logFor(src.getName());
-		File dstLog = refdb.logFor(dst.getName());
+		Path srcLog = refdb.logForPath(src.getName());
+		Path dstLog = refdb.logForPath(dst.getName());
 
-		if (!srcLog.exists())
+		if (!Files.exists(srcLog)) {
 			return true;
+                }
 
 		if (!rename(srcLog, dstLog))
 			return false;
@@ -208,7 +210,7 @@ class RefDirectoryRename extends RefRename {
 		}
 	}
 
-	private static boolean rename(File src, File dst) {
+	private static boolean rename(Path src, Path dst) {
 		try {
 			FileUtils.rename(src, dst, StandardCopyOption.ATOMIC_MOVE);
 			return true;
@@ -218,10 +220,20 @@ class RefDirectoryRename extends RefRename {
 			// ignore
 		}
 
-		File dir = dst.getParentFile();
-		if ((dir.exists() || !dir.mkdirs()) && !dir.isDirectory())
-			return false;
-		try {
+		Path dir = dst.getParent();
+                if (Files.exists(dir)) {
+                    if (!Files.isDirectory(dir)) {
+                        return false;
+                    }
+                } else {
+                    try {
+                        FileUtils.mkdirs(dir);
+                    } catch(IOException ex) {
+                        return false;
+                    }
+                }
+
+                try {
 			FileUtils.rename(src, dst, StandardCopyOption.ATOMIC_MOVE);
 			return true;
 		} catch (IOException e) {

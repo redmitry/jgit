@@ -47,8 +47,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.eclipse.jgit.internal.storage.pack.PackExt.INDEX;
 import static org.eclipse.jgit.internal.storage.pack.PackExt.PACK;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 
 import org.eclipse.jgit.errors.CorruptPackIndexException;
 import org.eclipse.jgit.errors.MissingObjectException;
@@ -117,7 +117,7 @@ public class DfsFsck {
 	}
 
 	private void checkPacks(ProgressMonitor pm, FsckError errors)
-			throws IOException, FileNotFoundException {
+			throws IOException, NoSuchFileException {
 		try (DfsReader ctx = objdb.newReader()) {
 			for (DfsPackFile pack : objdb.getPacks()) {
 				DfsPackDescription packDesc = pack.getPackDescription();

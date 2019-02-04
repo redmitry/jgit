@@ -44,6 +44,7 @@ package org.eclipse.jgit.errors;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.internal.JGitText;
@@ -54,7 +55,23 @@ import org.eclipse.jgit.internal.JGitText;
 public class LockFailedException extends IOException {
 	private static final long serialVersionUID = 1L;
 
-	private File file;
+	private Path file;
+
+	/**
+	 * @deprecated use {@link #LockFailedException(Path, String, Throwable)}
+	 *
+	 * @param file
+	 *            file that could not be locked
+	 * @param message
+	 *            exception message
+	 * @param cause
+	 *            cause, for later retrieval by
+	 *            {@link java.lang.Throwable#getCause()}
+	 * @since 4.1
+	 */
+	public LockFailedException(File file, String message, Throwable cause) {
+                this(file != null ? file.toPath() : null, message, cause);
+	}
 
 	/**
 	 * Constructor for LockFailedException
@@ -68,9 +85,21 @@ public class LockFailedException extends IOException {
 	 *            {@link java.lang.Throwable#getCause()}
 	 * @since 4.1
 	 */
-	public LockFailedException(File file, String message, Throwable cause) {
+	public LockFailedException(Path file, String message, Throwable cause) {
 		super(message, cause);
 		this.file = file;
+	}
+        
+	/**
+	 * @deprecated use {@link #LockFailedException(Path, String)}
+	 *
+	 * @param file
+	 *            file that could not be locked
+	 * @param message
+	 *            exception message
+	 */
+	public LockFailedException(File file, String message) {
+		this(file != null ? file.toPath() : null, message);
 	}
 
 	/**
@@ -81,9 +110,19 @@ public class LockFailedException extends IOException {
 	 * @param message
 	 *            exception message
 	 */
-	public LockFailedException(File file, String message) {
+	public LockFailedException(Path file, String message) {
 		super(message);
 		this.file = file;
+	}
+        
+	/**
+	 * @deprecated use {@link #LockFailedException(Path)}
+	 *
+	 * @param file
+	 *            file that could not be locked
+	 */
+	public LockFailedException(File file) {
+		this(file != null ? file.toPath() : null);
 	}
 
 	/**
@@ -92,16 +131,25 @@ public class LockFailedException extends IOException {
 	 * @param file
 	 *            file that could not be locked
 	 */
-	public LockFailedException(File file) {
+	public LockFailedException(Path file) {
 		this(file, MessageFormat.format(JGitText.get().cannotLock, file));
 	}
 
+	/**
+	 * @deprecated use {@link #getFilePath()}
+	 *
+	 * @return file
+	 */
+	public File getFile() {
+		return file.toFile();
+	}
+        
 	/**
 	 * Get the file that could not be locked
 	 *
 	 * @return file
 	 */
-	public File getFile() {
+	public Path getFilePath() {
 		return file;
 	}
 }

@@ -45,17 +45,17 @@ package org.eclipse.jgit.internal.storage.file;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.text.ParseException;
 import java.time.Instant;
 
 import org.eclipse.jgit.api.errors.JGitInternalException;
 import org.eclipse.jgit.lib.ConfigConstants;
-import org.eclipse.jgit.util.FileUtils;
 import org.eclipse.jgit.util.GitDateParser;
 import org.eclipse.jgit.util.SystemReader;
 
@@ -65,7 +65,7 @@ import org.eclipse.jgit.util.SystemReader;
 class GcLog {
 	private final FileRepository repo;
 
-	private final File logFile;
+	private final Path logFile;
 
 	private final LockFile lock;
 
@@ -83,7 +83,8 @@ class GcLog {
 	 */
 	GcLog(FileRepository repo) {
 		this.repo = repo;
-		logFile = new File(repo.getDirectory(), "gc.log"); //$NON-NLS-1$
+                final Path path = repo.getDirectoryPath();
+                logFile = path != null ? path.resolve("gc.log") : Paths.get("gc.log"); //$NON-NLS-1$
 		lock = new LockFile(logFile);
 	}
 
@@ -103,7 +104,7 @@ class GcLog {
 
 	private boolean autoGcBlockedByOldLockFile() {
 		try {
-			FileTime lastModified = Files.getLastModifiedTime(FileUtils.toPath(logFile));
+			FileTime lastModified = Files.getLastModifiedTime(logFile);
 			if (lastModified.toInstant().compareTo(getLogExpiry()) > 0) {
 				// There is an existing log file, which is too recent to ignore
 				return true;
@@ -152,11 +153,15 @@ class GcLog {
 	boolean commit() {
 		if (nonEmpty) {
 			return lock.commit();
-		} else {
-			logFile.delete();
-			lock.unlock();
-			return true;
 		}
+                
+                try {
+                        Files.deleteIfExists(logFile);
+                        lock.unlock();
+                        return true;
+                } catch (IOException ex) {}
+
+                return false;
 	}
 
 	/**

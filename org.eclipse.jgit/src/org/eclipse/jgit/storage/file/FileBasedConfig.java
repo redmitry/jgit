@@ -53,8 +53,10 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.text.MessageFormat;
 
 import org.eclipse.jgit.errors.ConfigInvalidException;
@@ -68,7 +70,6 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.util.FS;
 import org.eclipse.jgit.util.FileUtils;
-import org.eclipse.jgit.util.IO;
 import org.eclipse.jgit.util.RawParseUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,7 +81,7 @@ public class FileBasedConfig extends StoredConfig {
 	private final static Logger LOG = LoggerFactory
 			.getLogger(FileBasedConfig.class);
 
-	private final File configFile;
+	private final Path configFile;
 
 	private final FS fs;
 
@@ -91,7 +92,7 @@ public class FileBasedConfig extends StoredConfig {
 	private volatile ObjectId hash;
 
 	/**
-	 * Create a configuration with no default fallback.
+	 * @deprecated use {@link #FileBasedConfig(Path, FS)}
 	 *
 	 * @param cfgLocation
 	 *            the location of the configuration file on the file system
@@ -101,6 +102,34 @@ public class FileBasedConfig extends StoredConfig {
 	 */
 	public FileBasedConfig(File cfgLocation, FS fs) {
 		this(null, cfgLocation, fs);
+	}
+
+	/**
+	 * Create a configuration with no default fallback.
+	 *
+	 * @param cfgLocation
+	 *            the location of the configuration file on the file system
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 */
+	public FileBasedConfig(Path cfgLocation, FS fs) {
+		this(null, cfgLocation, fs);
+	}
+
+	/**
+	 * @deprecated use {@link #FileBasedConfig(Config, Path, FS)}
+	 *
+	 * @param base
+	 *            the base configuration file
+	 * @param cfgLocation
+	 *            the location of the configuration file on the file system
+	 * @param fs
+	 *            the file system abstraction which will be necessary to perform
+	 *            certain file system operations.
+	 */
+	public FileBasedConfig(Config base, File cfgLocation, FS fs) {
+                this(base, cfgLocation != null ? cfgLocation.toPath() : null, fs);
 	}
 
 	/**
@@ -114,14 +143,14 @@ public class FileBasedConfig extends StoredConfig {
 	 *            the file system abstraction which will be necessary to perform
 	 *            certain file system operations.
 	 */
-	public FileBasedConfig(Config base, File cfgLocation, FS fs) {
+	public FileBasedConfig(Config base, Path cfgLocation, FS fs) {
 		super(base);
 		configFile = cfgLocation;
 		this.fs = fs;
 		this.snapshot = FileSnapshot.DIRTY;
 		this.hash = ObjectId.zeroId();
 	}
-
+        
 	/** {@inheritDoc} */
 	@Override
 	protected boolean notifyUponTransientChanges() {
@@ -130,11 +159,20 @@ public class FileBasedConfig extends StoredConfig {
 	}
 
 	/**
-	 * Get location of the configuration file on disk
+	 * @deprecated use {@link #getFilePath()}
 	 *
 	 * @return location of the configuration file on disk
 	 */
 	public final File getFile() {
+		return configFile.toFile();
+	}
+
+	/**
+	 * Get location of the configuration file on disk
+	 *
+	 * @return location of the configuration file on disk
+	 */
+	public final Path getFilePath() {
 		return configFile;
 	}
 
@@ -152,9 +190,9 @@ public class FileBasedConfig extends StoredConfig {
 		int retries = 0;
 		while (true) {
 			final FileSnapshot oldSnapshot = snapshot;
-			final FileSnapshot newSnapshot = FileSnapshot.save(getFile());
+			final FileSnapshot newSnapshot = FileSnapshot.save(getFilePath());
 			try {
-				final byte[] in = IO.readFully(getFile());
+                                final byte[] in = Files.readAllBytes(getFilePath());
 				final ObjectId newHash = hash(in);
 				if (hash.equals(newHash)) {
 					if (oldSnapshot.equals(newSnapshot)) {
@@ -176,8 +214,8 @@ public class FileBasedConfig extends StoredConfig {
 					hash = newHash;
 				}
 				return;
-			} catch (FileNotFoundException noFile) {
-				if (configFile.exists()) {
+			} catch (NoSuchFileException noFile) {
+				if (Files.exists(configFile)) {
 					throw noFile;
 				}
 				clear();
@@ -189,16 +227,16 @@ public class FileBasedConfig extends StoredConfig {
 					if (LOG.isDebugEnabled()) {
 						LOG.debug(MessageFormat.format(
 								JGitText.get().configHandleIsStale,
-								Integer.valueOf(retries)), e);
+								retries), e);
 					}
 					retries++;
 					continue;
 				}
 				throw new IOException(MessageFormat
-						.format(JGitText.get().cannotReadFile, getFile()), e);
+						.format(JGitText.get().cannotReadFile, getFilePath()), e);
 			} catch (ConfigInvalidException e) {
 				throw new ConfigInvalidException(MessageFormat
-						.format(JGitText.get().cannotReadFile, getFile()), e);
+						.format(JGitText.get().cannotReadFile, getFilePath()), e);
 			}
 		}
 	}
@@ -229,14 +267,14 @@ public class FileBasedConfig extends StoredConfig {
 			out = Constants.encode(text);
 		}
 
-		final LockFile lf = new LockFile(getFile());
+		final LockFile lf = new LockFile(getFilePath());
 		if (!lf.lock())
-			throw new LockFailedException(getFile());
+			throw new LockFailedException(getFilePath());
 		try {
 			lf.setNeedSnapshot(true);
 			lf.write(out);
 			if (!lf.commit())
-				throw new IOException(MessageFormat.format(JGitText.get().cannotCommitWriteTo, getFile()));
+				throw new IOException(MessageFormat.format(JGitText.get().cannotCommitWriteTo, getFilePath()));
 		} finally {
 			lf.unlock();
 		}
@@ -261,7 +299,7 @@ public class FileBasedConfig extends StoredConfig {
 	@SuppressWarnings("nls")
 	@Override
 	public String toString() {
-		return getClass().getSimpleName() + "[" + getFile().getPath() + "]";
+		return getClass().getSimpleName() + "[" + getFilePath() + "]";
 	}
 
 	/**
@@ -271,7 +309,7 @@ public class FileBasedConfig extends StoredConfig {
 	 *         than the file on disk
 	 */
 	public boolean isOutdated() {
-		return snapshot.isModified(getFile());
+		return snapshot.isModified(getFilePath());
 	}
 
 	/**
@@ -282,19 +320,19 @@ public class FileBasedConfig extends StoredConfig {
 	@Override
 	protected byte[] readIncludedConfig(String relPath)
 			throws ConfigInvalidException {
-		final File file;
+		final Path file;
 		if (relPath.startsWith("~/")) { //$NON-NLS-1$
-			file = fs.resolve(fs.userHome(), relPath.substring(2));
+			file = fs.resolve(fs.userHomePath(), relPath.substring(2));
 		} else {
-			file = fs.resolve(configFile.getParentFile(), relPath);
+			file = fs.resolve(configFile.getParent(), relPath);
 		}
 
-		if (!file.exists()) {
+		if (!Files.exists(file)) {
 			return null;
 		}
 
 		try {
-			return IO.readFully(file);
+                        return Files.readAllBytes(file);
 		} catch (IOException ioe) {
 			throw new ConfigInvalidException(MessageFormat
 					.format(JGitText.get().cannotReadFile, relPath), ioe);

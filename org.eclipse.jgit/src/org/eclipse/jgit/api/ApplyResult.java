@@ -43,8 +43,11 @@
 package org.eclipse.jgit.api;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Encapsulates the result of a {@link org.eclipse.jgit.api.ApplyCommand}
@@ -53,8 +56,20 @@ import java.util.List;
  */
 public class ApplyResult {
 
-	private List<File> updatedFiles = new ArrayList<>();
+	private List<Path> updatedFiles = new ArrayList<>();
 
+	/**
+	 * @deprecated use {@link #addUpdatedFile(Path)}
+	 *
+	 * @param f
+	 *            an updated file
+	 * @return this instance
+	 */
+	public ApplyResult addUpdatedFile(File f) {
+		return addUpdatedFile(f.toPath());
+
+	}
+        
 	/**
 	 * Add updated file
 	 *
@@ -62,18 +77,29 @@ public class ApplyResult {
 	 *            an updated file
 	 * @return this instance
 	 */
-	public ApplyResult addUpdatedFile(File f) {
+	public ApplyResult addUpdatedFile(Path f) {
 		updatedFiles.add(f);
 		return this;
 
 	}
 
 	/**
-	 * Get updated files
+	 * @deprecated use {@link #getUpdatedFilePaths()}
 	 *
 	 * @return updated files
 	 */
 	public List<File> getUpdatedFiles() {
+                try (Stream<Path> files = updatedFiles.stream()) {
+                    return files.map(path -> path.toFile()).collect(Collectors.toList());
+                }
+	}
+        
+	/**
+	 * Get updated files
+	 *
+	 * @return updated files
+	 */
+	public List<Path> getUpdatedFilePaths() {
 		return updatedFiles;
 	}
 }

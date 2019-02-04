@@ -46,9 +46,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
@@ -58,6 +58,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.eclipse.jgit.util.FS;
+import org.eclipse.jgit.util.FileUtils;
 
 /**
  * NetRC file parser.
@@ -124,7 +125,7 @@ public class NetRC {
 		}
 	}
 
-	private File netrc;
+	private Path netrc;
 
 	private long lastModified;
 
@@ -156,25 +157,38 @@ public class NetRC {
 	}
 
 	/**
-	 * <p>Constructor for NetRC.</p>
+	 * @deprecated use {@link #NetRC(Path)}
 	 *
 	 * @param netrc
 	 *            the .netrc file
 	 */
 	public NetRC(File netrc) {
+		this(netrc != null ? netrc.toPath() : null);
+	}
+
+	/**
+	 * <p>Constructor for NetRC.</p>
+	 *
+	 * @param netrc
+	 *            the .netrc file
+	 */
+	public NetRC(Path netrc) {
 		this.netrc = netrc;
 		parse();
 	}
 
-	private static File getDefaultFile() {
-		File home = FS.DETECTED.userHome();
-		File netrc = new File(home, ".netrc"); //$NON-NLS-1$
-		if (netrc.exists())
-			return netrc;
+	private static Path getDefaultFile() {
+		final Path home = FS.DETECTED.userHomePath();
 
-		netrc = new File(home, "_netrc"); //$NON-NLS-1$
-		if (netrc.exists())
+		Path netrc = home.resolve(".netrc"); //$NON-NLS-1$
+		if (Files.exists(netrc)) {
 			return netrc;
+                }
+
+		netrc = home.resolve("_netrc"); //$NON-NLS-1$
+		if (Files.exists(netrc)) {
+			return netrc;
+                }
 
 		return null;
 	}
@@ -190,8 +204,13 @@ public class NetRC {
 		if (netrc == null)
 			return null;
 
-		if (this.lastModified != this.netrc.lastModified())
-			parse();
+                try {
+                    if (this.lastModified != FileUtils.lastModified(this.netrc)) {
+                            parse();
+                    }
+                } catch(IOException ex) {
+                    // ???
+                }
 
 		NetRCEntry entry = this.hosts.get(host);
 
@@ -212,10 +231,13 @@ public class NetRC {
 
 	private void parse() {
 		this.hosts.clear();
-		this.lastModified = this.netrc.lastModified();
+                try {
+                    this.lastModified = FileUtils.lastModified(netrc);
+                } catch(IOException ex) {
+                    
+                }
 
-		try (BufferedReader r = new BufferedReader(
-				new InputStreamReader(new FileInputStream(netrc), UTF_8))) {
+		try (BufferedReader r = Files.newBufferedReader(netrc, UTF_8)) {
 			String line = null;
 
 			NetRCEntry entry = new NetRCEntry();

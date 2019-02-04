@@ -42,11 +42,12 @@
  */
 package org.eclipse.jgit.api;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -225,10 +226,13 @@ public class BlameCommand extends GitCommand<BlameResult> {
 				if (!repo.isBare()) {
 					DirCache dc = repo.readDirCache();
 					int entry = dc.findEntry(path);
-					if (0 <= entry)
+					if (0 <= entry) {
 						gen.push(null, dc.getEntry(entry).getObjectId());
+                                        }
 
-					File inTree = new File(repo.getWorkTree(), path);
+                                        final Path workTree = repo.getWorkTreePath();
+                                        final Path inTree = workTree != null ? workTree.resolve(path)
+                                                                       : Paths.get(path);
 					if (repo.getFS().isFile(inTree)) {
 						RawText rawText = getRawText(inTree);
 						gen.push(null, rawText);
@@ -241,8 +245,8 @@ public class BlameCommand extends GitCommand<BlameResult> {
 		}
 	}
 
-	private RawText getRawText(File inTree) throws IOException,
-			FileNotFoundException {
+	private RawText getRawText(Path inTree) throws IOException,
+			NoSuchFileException {
 		RawText rawText;
 
 		WorkingTreeOptions workingTreeOptions = getRepository().getConfig()
@@ -257,10 +261,10 @@ public class BlameCommand extends GitCommand<BlameResult> {
 			break;
 		case TRUE:
 			try (AutoLFInputStream in = new AutoLFInputStream(
-					new FileInputStream(inTree), true)) {
+					Files.newInputStream(inTree), true)) {
 				// Canonicalization should lead to same or shorter length
 				// (CRLF to LF), so the file size on disk is an upper size bound
-				rawText = new RawText(toByteArray(in, (int) inTree.length()));
+				rawText = new RawText(toByteArray(in, (int) Files.size(inTree)));
 			}
 			break;
 		default:

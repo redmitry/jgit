@@ -47,9 +47,12 @@
 package org.eclipse.jgit.transport;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -95,7 +98,7 @@ class TransportBundleFile extends Transport implements TransportBundle {
 		public Transport open(URIish uri, Repository local, String remoteName)
 				throws NotSupportedException, TransportException {
 			if ("bundle".equals(uri.getScheme())) { //$NON-NLS-1$
-				File path = FS.DETECTED.resolve(new File("."), uri.getPath()); //$NON-NLS-1$
+				final Path path = FS.DETECTED.resolve(Paths.get("."), uri.getPath()); //$NON-NLS-1$
 				return new TransportBundleFile(local, uri, path);
 			}
 
@@ -111,18 +114,30 @@ class TransportBundleFile extends Transport implements TransportBundle {
 		public Transport open(URIish uri) throws NotSupportedException,
 				TransportException {
 			if ("bundle".equals(uri.getScheme())) { //$NON-NLS-1$
-				File path = FS.DETECTED.resolve(new File("."), uri.getPath()); //$NON-NLS-1$
+				final Path path = FS.DETECTED.resolve(Paths.get("."), uri.getPath()); //$NON-NLS-1$
 				return new TransportBundleFile(uri, path);
 			}
 			return TransportLocal.PROTO_LOCAL.open(uri);
 		}
 	};
 
-	private final File bundle;
+	private final Path bundle;
 
-	TransportBundleFile(Repository local, URIish uri, File bundlePath) {
+	TransportBundleFile(Repository local, URIish uri, Path bundlePath) {
 		super(local, uri);
 		bundle = bundlePath;
+	}
+
+	/**
+	 * @deprecated use {@link #TransportBundleFile(URIish, Path)}
+	 *
+	 * @param uri
+	 *            a {@link org.eclipse.jgit.transport.URIish} object.
+	 * @param bundlePath
+	 *            transport bundle path
+	 */
+	public TransportBundleFile(URIish uri, File bundlePath) {
+		this(uri, bundlePath != null ? bundlePath.toPath() : null);
 	}
 
 	/**
@@ -133,7 +148,7 @@ class TransportBundleFile extends Transport implements TransportBundle {
 	 * @param bundlePath
 	 *            transport bundle path
 	 */
-	public TransportBundleFile(URIish uri, File bundlePath) {
+	public TransportBundleFile(URIish uri, Path bundlePath) {
 		super(uri);
 		bundle = bundlePath;
 	}
@@ -144,10 +159,12 @@ class TransportBundleFile extends Transport implements TransportBundle {
 			TransportException {
 		final InputStream src;
 		try {
-			src = new FileInputStream(bundle);
-		} catch (FileNotFoundException err) {
+			src = Files.newInputStream(bundle);
+		} catch (FileNotFoundException ex) {
 			throw new TransportException(uri, JGitText.get().notFound);
-		}
+		} catch (IOException ex) {
+                    throw new TransportException(uri, JGitText.get().URINotSupported); // ???
+                }
 		return new BundleFetchConnection(this, src);
 	}
 

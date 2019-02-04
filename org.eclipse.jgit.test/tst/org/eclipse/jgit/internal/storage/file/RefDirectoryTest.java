@@ -1347,7 +1347,7 @@ public class RefDirectoryTest extends LocalDiskRepositoryTestCase {
 			refdir.pack(Arrays.asList("refs/heads/master"));
 			fail("expected LockFailedException");
 		} catch (LockFailedException e) {
-			assertEquals(refdir.packedRefsFile.getPath(), e.getFile().getPath());
+			assertEquals(refdir.packedRefsFile, e.getFilePath());
 		} finally {
 			myLock.unlock();
 		}

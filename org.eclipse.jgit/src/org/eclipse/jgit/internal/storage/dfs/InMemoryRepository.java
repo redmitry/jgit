@@ -1,9 +1,9 @@
 package org.eclipse.jgit.internal.storage.dfs;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -146,11 +146,11 @@ public class InMemoryRepository extends DfsRepository {
 
 		@Override
 		protected ReadableChannel openFile(DfsPackDescription desc, PackExt ext)
-				throws FileNotFoundException, IOException {
+				throws NoSuchFileException, IOException {
 			MemPack memPack = (MemPack) desc;
 			byte[] file = memPack.get(ext);
 			if (file == null)
-				throw new FileNotFoundException(desc.getFileName(ext));
+				throw new NoSuchFileException(desc.getFileName(ext));
 			return new ByteArrayReadableChannel(file, blockSize);
 		}
 
