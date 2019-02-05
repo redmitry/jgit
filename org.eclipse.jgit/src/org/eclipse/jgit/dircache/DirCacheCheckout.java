@@ -232,7 +232,7 @@ public class DirCacheCheckout {
 		this.headCommitTree = headCommitTree;
 		this.mergeCommitTree = mergeCommitTree;
 		this.workingTree = workingTree;
-		this.initialCheckout = !repo.isBare() && !repo.getIndexFile().exists();
+		this.initialCheckout = !repo.isBare() && !Files.exists(repo.getIndexFilePath());
 	}
 
 	/**
