@@ -91,6 +91,9 @@ public class FetchCommandTest extends RepositoryTestCase {
 		remoteConfig.addURI(uri);
 		remoteConfig.update(config);
 		config.save();
+                
+		addRepoToClose(git.getRepository());
+		addRepoToClose(remoteGit.getRepository());
 	}
 
 	@Test
