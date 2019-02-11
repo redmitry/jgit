@@ -1009,10 +1009,10 @@ public class FileUtils {
 	 */
 	public static void setHidden(Path file, boolean hidden) throws IOException {
                 if (Files.isHidden(file) != hidden) {
-                        DosFileAttributeView dos = Files.getFileAttributeView(file, 
+                        final DosFileAttributeView dos = Files.getFileAttributeView(file, 
                                 DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
                         if (dos != null) {
-                            dos.setHidden(hidden); //$NON-NLS-1$
+                            dos.setHidden(hidden);
                         }
                 }
 	}
