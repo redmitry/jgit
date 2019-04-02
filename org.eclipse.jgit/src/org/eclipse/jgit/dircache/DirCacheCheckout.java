@@ -74,7 +74,6 @@ import org.eclipse.jgit.lib.CoreConfig.EolStreamType;
 import org.eclipse.jgit.lib.CoreConfig.SymLinks;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.NullProgressMonitor;
-import org.eclipse.jgit.lib.ObjectChecker;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.lib.ObjectReader;
@@ -1636,24 +1635,16 @@ public class DirCacheCheckout {
 	@SuppressWarnings("deprecation")
 	private static void checkValidPath(CanonicalTreeParser t)
 			throws InvalidPathException {
-		ObjectChecker chk = new ObjectChecker()
-			.setSafeForWindows(SystemReader.getInstance().isWindows())
-			.setSafeForMacOS(SystemReader.getInstance().isMacOS());
-		for (CanonicalTreeParser i = t; i != null; i = i.getParent())
-			checkValidPathSegment(chk, i);
-	}
-
-	private static void checkValidPathSegment(ObjectChecker chk,
-			CanonicalTreeParser t) throws InvalidPathException {
-		try {
-			int ptr = t.getNameOffset();
-			int end = ptr + t.getNameLength();
-			chk.checkPathSegment(t.getEntryPathBuffer(), ptr, end);
-		} catch (CorruptObjectException err) {
-			String path = t.getEntryPathString();
-			InvalidPathException i = new InvalidPathException(path);
-			i.initCause(err);
-			throw i;
-		}
+            
+                final SystemReader sr = SystemReader.getInstance();
+		for (CanonicalTreeParser i = t; i != null; i = i.getParent()) {
+                        try {
+                                sr.checkPath(i.getEntryPathBuffer());
+                        } catch (CorruptObjectException err) {
+                                InvalidPathException ex = new InvalidPathException(i.getEntryPathString());
+                                ex.initCause(err);
+                                throw ex;
+                        }
+                }
 	}
 }
