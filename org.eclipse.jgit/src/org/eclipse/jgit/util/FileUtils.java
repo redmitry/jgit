@@ -649,7 +649,7 @@ public class FileUtils {
 		if (SystemReader.getInstance().isWindows()) {
 			target = target.replace('/', '\\');
 		}
-		Path nioTarget = toPath(new File(target));
+		Path nioTarget = path.getFileSystem().getPath(target);
 		return Files.createSymbolicLink(path, nioTarget);
 	}
 
@@ -1255,25 +1255,59 @@ public class FileUtils {
 	 */
 	public static Attributes getFileAttributesPosix(FS fs, Path file) {
 		try {
-			PosixFileAttributes readAttributes = file
-					.getFileSystem()
-					.provider()
-					.getFileAttributeView(file,
-							PosixFileAttributeView.class,
-							LinkOption.NOFOLLOW_LINKS).readAttributes();
-			Attributes attributes = new Attributes(
+                        PosixFileAttributeView posixAttributeView = file
+                                .getFileSystem()
+                                .provider()
+                                .getFileAttributeView(file,
+                                        PosixFileAttributeView.class,
+                                        LinkOption.NOFOLLOW_LINKS);
+                        if (posixAttributeView != null) {
+                                PosixFileAttributes readAttributes = posixAttributeView.readAttributes();
+                                return new Attributes(
+                                                fs,
+                                                file,
+                                                true,
+                                                readAttributes.isDirectory(),
+                                                readAttributes.permissions().contains(
+                                                		PosixFilePermission.OWNER_EXECUTE),
+                                                readAttributes.isSymbolicLink(),
+                                                readAttributes.isRegularFile(),
+                                                readAttributes.creationTime().toMillis(),
+                                                readAttributes.lastModifiedTime().toMillis(),
+                                                readAttributes.size());
+                        }
+                        
+                        BasicFileAttributeView basicAttributeView = file
+                                .getFileSystem()
+                                .provider()
+                                .getFileAttributeView(file, 
+                                        BasicFileAttributeView.class, 
+                                        LinkOption.NOFOLLOW_LINKS);
+                        if (basicAttributeView != null) {
+                                BasicFileAttributes readAttributes = basicAttributeView.readAttributes();
+                                return new Attributes(
+                                                fs,
+                                                file,
+                                                true,
+                                                readAttributes.isDirectory(),
+                                                Files.isExecutable(file),
+                                                readAttributes.isSymbolicLink(),
+                                                readAttributes.isRegularFile(),
+                                                readAttributes.creationTime().toMillis(),
+                                                readAttributes.lastModifiedTime().toMillis(),
+                                                readAttributes.size());      
+                        }
+                        return new Attributes(
 					fs,
 					file,
-					true, //
-					readAttributes.isDirectory(), //
-					readAttributes.permissions().contains(
-							PosixFilePermission.OWNER_EXECUTE),
-					readAttributes.isSymbolicLink(),
-					readAttributes.isRegularFile(), //
-					readAttributes.creationTime().toMillis(), //
-					readAttributes.lastModifiedTime().toMillis(),
-					readAttributes.size());
-			return attributes;
+					true,
+					Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS),
+                                        Files.isExecutable(file),
+                                        Files.isSymbolicLink(file),
+                                        Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS),
+					0L,
+                                        0L,
+					Files.size(file));
 		} catch (IOException e) {
 			return new Attributes(file, fs);
 		}
